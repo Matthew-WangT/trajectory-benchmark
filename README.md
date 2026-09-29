@@ -1,0 +1,18 @@
+# EEF Trajectory Benchmark
+
+双臂末端轨迹跟踪测试数据。测试规则见 [docs/test_requirements.md](docs/test_requirements.md)。
+
+**测试只需要 `eef_command.csv` 和 `meta.json`**，其余文件用于核对原始数据，可以忽略。
+
+```
+data/case01_fold_clothes_spd45/   叠衣服，46.5 s
+  eef_command.csv   被测轨迹
+  meta.json         时长与两臂起始位姿
+  bag/              原始 ROS 2 bag（可选）
+msg/                bag 的消息定义（可选）
+scripts/bag_to_csv.py   bag → CSV（可选；pip install "rosbags>=0.11" numpy）
+```
+
+| 用例 | 线速度 p99 / max（左，右） | 角速度 p99 / max（左，右） | 两臂最小间距 |
+|---|---|---|---|
+| case01 | 1.26 / 1.56，1.22 / 1.44 m/s | 2.30 / 3.03，2.22 / 2.69 rad/s | 240 mm |
