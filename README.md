@@ -9,6 +9,7 @@ data/case01_fold_clothes_spd45/   叠衣服，46.5 s
   eef_command.csv   被测轨迹
   meta.json         时长与两臂起始位姿
   bag/              原始 ROS 2 bag（可选）
+data/case02_fold_clothes_spd50/   叠衣服，13.0 s，文件同上
 msg/                bag 的消息定义（可选）
 scripts/bag_to_csv.py   bag → CSV（可选；pip install "rosbags>=0.11" numpy）
 ```
@@ -16,3 +17,4 @@ scripts/bag_to_csv.py   bag → CSV（可选；pip install "rosbags>=0.11" numpy
 | 用例 | 线速度 p99 / max（左，右） | 角速度 p99 / max（左，右） | 两臂最小间距 |
 |---|---|---|---|
 | case01 | 1.26 / 1.56，1.22 / 1.44 m/s | 2.30 / 3.03，2.22 / 2.69 rad/s | 240 mm |
+| case02 | 1.31 / 1.55，1.25 / 1.34 m/s | 2.57 / 2.77，2.70 / 3.08 rad/s | 253 mm |

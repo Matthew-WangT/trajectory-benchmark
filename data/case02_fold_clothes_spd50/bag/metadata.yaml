@@ -1,0 +1,44 @@
+rosbag2_bagfile_information:
+  compression_format: ''
+  compression_mode: ''
+  custom_data: null
+  duration:
+    nanoseconds: 17145019243
+  files:
+  - duration:
+      nanoseconds: 17145019243
+    message_count: 6860
+    path: bag_0.mcap
+    starting_time:
+      nanoseconds_since_epoch: 1790736897018207113
+  message_count: 6860
+  relative_file_paths:
+  - bag_0.mcap
+  ros_distro: rosbags
+  starting_time:
+    nanoseconds_since_epoch: 1790736897018207113
+  storage_identifier: mcap
+  topics_with_message_count:
+  - message_count: 3430
+    topic_metadata:
+      name: /end_command_in_base/right_gripper_f90c_end_effector_link
+      offered_qos_profiles: "- avoid_ros_namespace_conventions: false\n  deadline:
+        {nsec: 854775807, sec: 9223372036}\n  depth: 10\n  durability: 2\n  history:
+        1\n  lifespan: {nsec: 854775807, sec: 9223372036}\n  liveliness: 1\n  liveliness_lease_duration:
+        {nsec: 854775807, sec: 9223372036}\n  reliability: 2"
+      serialization_format: cdr
+      type: ros2_msg/msg/LinkInfo
+      type_description_hash: 
+        RIHS01_f6dfc83b27d640ff43fe5e5fa7afb49384f04c68af27d7f4a4a4803273c4078a
+  - message_count: 3430
+    topic_metadata:
+      name: /end_command_in_base/left_gripper_f90c_end_effector_link
+      offered_qos_profiles: "- avoid_ros_namespace_conventions: false\n  deadline:
+        {nsec: 854775807, sec: 9223372036}\n  depth: 10\n  durability: 2\n  history:
+        1\n  lifespan: {nsec: 854775807, sec: 9223372036}\n  liveliness: 1\n  liveliness_lease_duration:
+        {nsec: 854775807, sec: 9223372036}\n  reliability: 2"
+      serialization_format: cdr
+      type: ros2_msg/msg/LinkInfo
+      type_description_hash: 
+        RIHS01_f6dfc83b27d640ff43fe5e5fa7afb49384f04c68af27d7f4a4a4803273c4078a
+  version: 5
