@@ -16,6 +16,8 @@ FakeArm::FakeArm(const JointVector& left_q0, const JointVector& right_q0, double
 bool FakeArm::Send(const JointVector& left_q, const JointVector& right_q) {
   left_cmd_ = left_q;
   right_cmd_ = right_q;
+  ++sent_frames_;
+  state_.left.in_frame_serial = state_.right.in_frame_serial = sent_frames_;
   return true;
 }
 
@@ -25,7 +27,8 @@ void FakeArm::Integrate(ArmFeedback& arm, const JointVector& cmd, double dt) con
   arm.dq = (q_next - arm.q) / dt;
   arm.q = q_next;
   arm.q_ext = q_next;
-  arm.q_cmd_echo = cmd;
+  arm.q_cmd_echo = q_next;
+  arm.q_cmd_received = cmd;
 }
 
 bool FakeArm::Read(Feedback& feedback) {

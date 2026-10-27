@@ -28,6 +28,7 @@ class FakeArm : public ArmInterface {
   Feedback state_;
   std::chrono::steady_clock::time_point start_;
   int64_t last_frame_ = -1;
+  int sent_frames_ = 0;
 };
 
 }  // namespace arm

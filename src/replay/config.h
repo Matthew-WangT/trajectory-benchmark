@@ -33,6 +33,10 @@ struct SafetyConfig {
   double joint_limit_margin_rad = 0.02;
   // Abort when no new feedback frame arrives for this long.
   double feedback_timeout_s = 0.02;
+  // Abort when the controller receives the commands this late for max_command_delay_frames feedback frames in a row,
+  // see CommandDelayMonitor.
+  double max_command_delay_s = 0.03;
+  int max_command_delay_frames = 50;
   // Abort when the IK controller holds for this many consecutive evaluations.
   int max_consecutive_holds = 50;
   // Refuse to start when the measured joints are further than this from the S0 target.
@@ -56,6 +60,8 @@ struct ReplayConfig {
   int rt_priority = 80;
   // The IK controller is evaluated every `evaluate_every_ticks` loop ticks of 1 ms.
   int evaluate_every_ticks = 2;
+  // The command is sent every `send_every_ticks` loop ticks of 1 ms, see config/marvin.yaml.
+  int send_every_ticks = 2;
   std::string controller_yaml;
   std::string urdf;
   ReferenceMode reference_mode = ReferenceMode::kLookahead;

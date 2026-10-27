@@ -54,8 +54,10 @@ struct ArmFeedback {
   JointVector dq = JointVector::Zero();
   // Joint position of the output side encoder.
   JointVector q_ext = JointVector::Zero();
-  // Joint command echoed by the controller.
+  // FB_Joint_Cmd of the controller; in the joint impedance mode it reads the measured position, not the command.
   JointVector q_cmd_echo = JointVector::Zero();
+  // Joint command as received by the controller (RT_IN m_Joint_CMD_Pos).
+  JointVector q_cmd_received = JointVector::Zero();
   JointVector current = JointVector::Zero();
   JointVector torque = JointVector::Zero();
   JointVector temperature = JointVector::Zero();
@@ -63,6 +65,9 @@ struct ArmFeedback {
   int state = 0;
   int error_code = 0;
   int frame_miss = 0;
+  // Serial of the last command frame the controller received, and its count of missed real-time cycles.
+  int in_frame_serial = 0;
+  int sys_cycle_miss = 0;
 };
 
 struct Feedback {

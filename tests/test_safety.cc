@@ -87,5 +87,36 @@ TEST_F(SafetyTest, AbortsOnNonFiniteCommand) {
   EXPECT_TRUE(monitor_.Check(0.001, q, DualJoints::Zero(), true, false, false).has_value());
 }
 
+TEST(CommandDelayMonitorTest, EstimatesTheDelayOfAMovingCommand) {
+  CommandDelayMonitor monitor;
+  auto command = [](double t) { return DualJoints::Constant(0.5 * t); };
+  for (int k = 0; k <= 100; ++k) {
+    monitor.AddSent(0.002 * k, command(0.002 * k));
+  }
+  // Received what was sent 40 ms ago.
+  const auto delay = monitor.Estimate(0.2, command(0.16));
+  ASSERT_TRUE(delay.has_value());
+  EXPECT_NEAR(*delay, 0.04, 1e-9);
+}
+
+TEST(CommandDelayMonitorTest, CannotTellOnAStillCommand) {
+  CommandDelayMonitor monitor;
+  for (int k = 0; k <= 100; ++k) {
+    monitor.AddSent(0.002 * k, DualJoints::Constant(0.3));
+  }
+  EXPECT_FALSE(monitor.Estimate(0.2, DualJoints::Constant(0.3)).has_value());
+}
+
+TEST(CommandDelayMonitorTest, ADelayBeyondTheWindowReadsAsTheWindow) {
+  CommandDelayMonitor monitor(0.1);
+  auto command = [](double t) { return DualJoints::Constant(0.5 * t); };
+  for (int k = 0; k <= 500; ++k) {
+    monitor.AddSent(0.002 * k, command(0.002 * k));
+  }
+  const auto delay = monitor.Estimate(1.0, command(0.5));
+  ASSERT_TRUE(delay.has_value());
+  EXPECT_NEAR(*delay, 0.1, 0.003);
+}
+
 }  // namespace
 }  // namespace replay

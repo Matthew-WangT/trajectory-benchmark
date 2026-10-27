@@ -129,6 +129,9 @@ void ParseArm(const RT_OUT& out, const RT_IN& in, const StateCtr& state, ArmFeed
   arm.state = state.m_CurState;
   arm.error_code = state.m_ERRCode;
   arm.frame_miss = in.m_FrameMissCnt;
+  arm.q_cmd_received = FromFloats(in.m_Joint_CMD_Pos, kRadiansPerDegree);
+  arm.in_frame_serial = in.m_InFrameSerial;
+  arm.sys_cycle_miss = in.m_SysCycMissCnt;
 }
 
 }  // namespace
@@ -312,6 +315,16 @@ bool MarvinArm::EnterJointImpedance() {
   }
   std::this_thread::sleep_for(std::chrono::milliseconds(kStateSettleMs));
 
+  DCSS dcss;
+  if (OnGetBuf(&dcss)) {
+    for (int i = 0; i < 2; ++i) {
+      LOG(INFO) << "Arm " << kArmNames[i] << " controller K "
+                << Eigen::Map<const Eigen::VectorXf>(dcss.m_In[i].m_Joint_K, kArmDoF).transpose() << " D "
+                << Eigen::Map<const Eigen::VectorXf>(dcss.m_In[i].m_Joint_D, kArmDoF).transpose() << ", ImpType "
+                << dcss.m_In[i].m_ImpType << ", state " << dcss.m_State[i].m_CurState << ", vel/acc ratio "
+                << dcss.m_In[i].m_Joint_Vel_Ratio << "/" << dcss.m_In[i].m_Joint_Acc_Ratio;
+    }
+  }
   LOG(INFO) << "Entered the joint impedance mode. left K " << control.left.stiffness.transpose() << " D "
             << control.left.damping.transpose() << ", right K " << control.right.stiffness.transpose() << " D "
             << control.right.damping.transpose();

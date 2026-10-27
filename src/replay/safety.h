@@ -1,5 +1,6 @@
 #pragma once
 
+#include <deque>
 #include <optional>
 #include <string>
 
@@ -34,6 +35,27 @@ class SafetyMonitor {
   double prev_t_ = 0.0;
   double last_feedback_t_ = 0.0;
   int consecutive_holds_ = 0;
+};
+
+// Estimates how late the controller receives the commands: the received command (RT_IN m_Joint_CMD_Pos) is matched
+// against the recently sent ones. Only measurable while the command moves, a still command reads as no delay.
+class CommandDelayMonitor {
+ public:
+  // `window_s` bounds the delay that can be resolved, a longer one reads as `window_s`.
+  explicit CommandDelayMonitor(double window_s = 0.2) : window_s_(window_s) {}
+
+  void Reset() { sent_.clear(); }
+  void AddSent(double t, const DualJoints& q);
+  // Delay of the command received at time `t`, nullopt while the recent commands hardly move.
+  std::optional<double> Estimate(double t, const DualJoints& received) const;
+
+ private:
+  struct Sent {
+    double t;
+    DualJoints q;
+  };
+  double window_s_;
+  std::deque<Sent> sent_;
 };
 
 }  // namespace replay

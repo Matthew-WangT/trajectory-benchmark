@@ -24,6 +24,10 @@ control:
   vel_feedforward_step_ms: 2
   # The command is sent every 1 ms tick and the IK controller evaluated every 2 ticks, as in the reference pipeline.
   evaluate_every_ticks: 2
+  # Send period in 1 ms ticks. 2 matches the velocity feedforward step: measured on infer-10, a 1 ms stream is received
+  # at ~920 frames/s right after entering the mode, the commands queue up and reach the arm ~270 ms late, while a 2 ms
+  # stream arrives within 3 ms and moves the arm 10 ms after sending. 1 is the period of the reference pipeline.
+  send_every_ticks: 2
 
 # Tool written to the controller, used by its gravity compensation.
 # kine: X, Y, Z in mm and A, B, C in deg of the tool from the flange.
@@ -74,6 +78,9 @@ safety:
   joint_limit_margin_rad: 0.02
   feedback_timeout_s: 0.02
   max_consecutive_holds: 50
+  # Delay of the command received by the controller behind the sent one, checked while the command moves.
+  max_command_delay_s: 0.03
+  max_command_delay_frames: 50
   max_initial_deviation_rad: 2.0
   min_tcp_distance_m: 0.15
   max_feedforward_joint_vel_deg_s: 180.0

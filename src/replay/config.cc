@@ -72,6 +72,7 @@ ReplayConfig LoadReplayConfig(const std::string& yaml_path) {
   ReadIfPresent(control, "enable_vel_feedforward", config.robot.control.enable_vel_feedforward);
   ReadIfPresent(control, "vel_feedforward_step_ms", config.robot.control.vel_feedforward_step_ms);
   ReadIfPresent(control, "evaluate_every_ticks", config.evaluate_every_ticks);
+  ReadIfPresent(control, "send_every_ticks", config.send_every_ticks);
 
   const YAML::Node tool = root["tool"];
   if (tool) {
@@ -116,6 +117,8 @@ ReplayConfig LoadReplayConfig(const std::string& yaml_path) {
   ReadIfPresent(safety, "joint_limit_margin_rad", config.safety.joint_limit_margin_rad);
   ReadIfPresent(safety, "feedback_timeout_s", config.safety.feedback_timeout_s);
   ReadIfPresent(safety, "max_consecutive_holds", config.safety.max_consecutive_holds);
+  ReadIfPresent(safety, "max_command_delay_s", config.safety.max_command_delay_s);
+  ReadIfPresent(safety, "max_command_delay_frames", config.safety.max_command_delay_frames);
   ReadIfPresent(safety, "max_initial_deviation_rad", config.safety.max_initial_deviation_rad);
   ReadIfPresent(safety, "min_tcp_distance_m", config.safety.min_tcp_distance_m);
   ReadIfPresent(safety, "max_feedforward_joint_vel_deg_s", config.safety.max_feedforward_joint_vel_deg_s);

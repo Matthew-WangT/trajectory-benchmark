@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <sstream>
 
 namespace replay {
@@ -77,6 +78,37 @@ std::optional<std::string> SafetyMonitor::Check(double t, const DualJoints& q_cm
     }
   }
   return std::nullopt;
+}
+
+void CommandDelayMonitor::AddSent(double t, const DualJoints& q) {
+  sent_.push_back({t, q});
+  while (!sent_.empty() && sent_.front().t < t - window_s_) {
+    sent_.pop_front();
+  }
+}
+
+std::optional<double> CommandDelayMonitor::Estimate(double t, const DualJoints& received) const {
+  // Below this spread of the sent commands the match is ambiguous.
+  constexpr double kMinMotionRad = 0.002;
+  if (sent_.size() < 2) {
+    return std::nullopt;
+  }
+  DualJoints lower = sent_.front().q, upper = sent_.front().q;
+  double best_err = std::numeric_limits<double>::infinity();
+  double best_t = sent_.front().t;
+  for (const Sent& sent : sent_) {
+    lower = lower.cwiseMin(sent.q);
+    upper = upper.cwiseMax(sent.q);
+    const double err = (sent.q - received).cwiseAbs().maxCoeff();
+    if (err < best_err) {
+      best_err = err;
+      best_t = sent.t;
+    }
+  }
+  if ((upper - lower).maxCoeff() < kMinMotionRad) {
+    return std::nullopt;
+  }
+  return t - best_t;
 }
 
 }  // namespace replay

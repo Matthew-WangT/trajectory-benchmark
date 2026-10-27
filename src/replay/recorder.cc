@@ -96,23 +96,27 @@ void Recorder::Write(const std::string& dir) const {
 
   file = Open(out / "raw_fb.csv");
   std::fprintf(file, "t_s,serial");
-  for (const char* field : {"q", "dq", "q_ext", "q_cmd_echo", "current", "tau", "temp", "est_force"}) {
+  for (const char* field : {"q", "dq", "q_ext", "q_cmd_echo", "q_cmd_rx", "current", "tau", "temp", "est_force"}) {
     WriteJointHeader(file, field);
   }
-  std::fprintf(file, ",l_state,l_error,l_frame_miss,r_state,r_error,r_frame_miss\n");
+  std::fprintf(file,
+               ",l_state,l_error,l_frame_miss,l_in_serial,l_syscyc_miss,r_state,r_error,r_frame_miss,r_in_serial,"
+               "r_syscyc_miss\n");
   for (const FeedbackRecord& r : feedback_) {
     const arm::Feedback& f = r.feedback;
     std::fprintf(file, "%.6f,%lld", r.t, static_cast<long long>(f.serial));
     const arm::ArmFeedback* arms[] = {&f.left, &f.right};
     for (auto member : {&arm::ArmFeedback::q, &arm::ArmFeedback::dq, &arm::ArmFeedback::q_ext,
-                        &arm::ArmFeedback::q_cmd_echo, &arm::ArmFeedback::current, &arm::ArmFeedback::torque,
+                        &arm::ArmFeedback::q_cmd_echo, &arm::ArmFeedback::q_cmd_received, &arm::ArmFeedback::current,
+                        &arm::ArmFeedback::torque,
                         &arm::ArmFeedback::temperature, &arm::ArmFeedback::est_force}) {
       for (const arm::ArmFeedback* a : arms) {
         WriteValues(file, a->*member);
       }
     }
     for (const arm::ArmFeedback* a : arms) {
-      std::fprintf(file, ",%d,%d,%d", a->state, a->error_code, a->frame_miss);
+      std::fprintf(file, ",%d,%d,%d,%d,%d", a->state, a->error_code, a->frame_miss, a->in_frame_serial,
+                   a->sys_cycle_miss);
     }
     std::fprintf(file, "\n");
   }

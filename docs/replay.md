@@ -5,8 +5,8 @@
 ## 控制链路
 
 ```
-eef_command.csv ──(按 t_s 因果释放)──> OCS2 滚动时域 IK ──q_cmd──> 关节阻抗 (SDK) ──> Marvin
-                                       500 Hz 评估              1 kHz 下发
+eef_command.csv ──> OCS2 滚动时域 IK ──q_cmd──> 关节阻抗 (SDK) ──> Marvin
+                    500 Hz 评估              500 Hz 下发
 ```
 
 - **IK**：`src/mpc/` 移植自参考管线的 `controller::DualArmOcs2IkController`，参数和 task `.info` 都是原样拷贝（`config/ocs2/`）。后台线程持续跑 MPC，控制线程每 2 ms `Evaluate` 一次。
@@ -15,7 +15,7 @@ eef_command.csv ──(按 t_s 因果释放)──> OCS2 滚动时域 IK ──q
   - `latest`：严格因果，只给最新到达的那个点，放在 `now + reference_lead_s` 处并保持。
   - case02 dry-run 的 TCP 误差 RMS：lookahead 约 17 mm（等效时延 7 ms）；latest 在 lead 取 0.2 s 时约 92 mm（185 ms），取 5 ms 时约 57 mm（95 ms）。lookahead 下剩下约 16 mm 是 IK 本身的误差，不是时延（`default_q` 正则、输入代价 R、每次求解只迭代 1 次）。
 - **预热**：进入阻抗模式之前，MPC 先对着静止目标跑 `mpc.warm_up_s`（1 s），不向机器人下发命令。如果不预热，首次运行的 S1 起步阶段会出现 75–420 deg/s 的关节命令瞬态。
-- **下发**：1 ms 的 SCHED_FIFO 循环，每个 tick 读一次反馈、发一次最新的 `q_cmd`（零阶保持）。控制器侧开启 PD 速度前馈，step 为 2 ms。
+- **下发**：1 ms 的 SCHED_FIFO 循环，每个 tick 读一次反馈；`q_cmd` 每 `control.send_every_ticks` 个 tick 发一次（默认 2，即 500 Hz，和 PD 速度前馈的 2 ms step 一致）。在 infer-10 上实测：按 1 kHz 发送时，进入阻抗模式后的前几秒控制器每秒只收到约 920 帧，命令在接收端排起队，晚约 270 ms 才到达手臂，而且之后不会消退；按 500 Hz 发送时，控制器 3 ms 内收到，下发到实测运动约 7–10 ms。
 - **控制模式**：只用关节阻抗。kp/kd、vel/acc ratio、速度前馈、工具参数都在 `config/marvin.yaml` 里，左右臂分别配置。
 
 每次运行的时间轴：
@@ -38,7 +38,7 @@ eef_command.csv ──(按 t_s 因果释放)──> OCS2 滚动时域 IK ──q
 - 当前关节和 `q_pd` 的偏差不能超过 `max_initial_deviation_rad`。
 - 真机运行前，必须已有同一用例的 dry-run 结果，且 IK 输出的关节速度峰值低于 180 deg/s（速度前馈的前提）。
 
-运行中每个 tick 检查：跟踪误差、命令步长、URDF 关节限位（扣除余量）、反馈超时、IK 连续 hold。任何一项触发（包括 Ctrl-C），都会立即停止更新命令并下使能，抱闸锁住手臂。数据照常落盘，`run_info.json` 里标记为 `aborted` 并记录原因。
+运行中每个 tick 检查：跟踪误差、命令步长、URDF 关节限位（扣除余量）、反馈超时、IK 连续 hold，以及命令传输延迟：把控制器收到的命令（`RT_IN m_Joint_CMD_Pos`）和最近发出的命令做比对，命令在运动时如果连续 50 帧都晚于 30 ms，就 abort。注意，阻抗模式下 `FB_Joint_Cmd` 读到的是实测位置，不是命令。任何一项触发（包括 Ctrl-C），都会立即停止更新命令并下使能，抱闸锁住手臂。数据照常落盘，`run_info.json` 里标记为 `aborted` 并记录原因。
 
 ## 步骤
 
@@ -100,4 +100,4 @@ ctest --test-dir build         # 单元测试；test_mpc_smoke 第一次运行�
 
 ## "说明"模板（第 4 节第 2 条）
 
-> `T_yours_ours` = 单位变换（Marvin 就是原机，平移 (0, 0, 0) m，四元数 (0, 0, 0, 1)）。实测位姿由编码器关节角经 URDF 正运动学得到（`serial_marvin_with_gripper.urdf`，TCP 为法兰前方 0.227 m 的虚拟点）。控制模式为关节阻抗：kp = [22,22,22,15,8,8,8]，kd = 0.3，控制器开启 PD 速度前馈（step 2 ms）。关节命令由 OCS2 滚动时域 IK 在线生成，500 Hz 评估、1 kHz 下发（零阶保持）。负载：F90C 夹爪 / 空载（二选一）。控制器固有的插值和滤波：①**与第 3 节第 3 条不一致**：IK 参考使用未来 0.2 s 内的轨迹点（与线上 VLA 的 chunk 用法一致），属于前瞻；②IK 输出关节增量按 10.5 rad/s 限幅；③起始段 S1 的 TCP 插值不属于被测轨迹。
+> `T_yours_ours` = 单位变换（Marvin 就是原机，平移 (0, 0, 0) m，四元数 (0, 0, 0, 1)）。实测位姿由编码器关节角经 URDF 正运动学得到（`serial_marvin_with_gripper.urdf`，TCP 为法兰前方 0.227 m 的虚拟点）。控制模式为关节阻抗：kp = [22,22,22,15,8,8,8]，kd = 0.3，控制器开启 PD 速度前馈（step 2 ms）。关节命令由 OCS2 滚动时域 IK 在线生成，500 Hz 评估、500 Hz 下发。负载：F90C 夹爪 / 空载（二选一）。控制器固有的插值和滤波：①**与第 3 节第 3 条不一致**：IK 参考使用未来 0.2 s 内的轨迹点（与线上 VLA 的 chunk 用法一致），属于前瞻；②IK 输出关节增量按 10.5 rad/s 限幅；③起始段 S1 的 TCP 插值不属于被测轨迹。

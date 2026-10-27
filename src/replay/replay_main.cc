@@ -58,7 +58,8 @@ struct Args {
   int runs = 3;
   bool dry_run = false;
   std::string out;
-  // "connect" stops after the connection checks, "S0" after the joint move to q_pd and a hold.
+  // "connect" stops after the connection checks, "S0" after the joint move to q_pd and a hold, "S2" before the
+  // trajectory (S3), so that only the slow moves run.
   std::string stop_after;
   bool skip_vel_check = false;
 };
@@ -66,7 +67,7 @@ struct Args {
 void PrintUsage() {
   std::fprintf(stderr,
                "usage: replay --config CONFIG --case CASE_DIR [--runs N] [--dry-run] [--out DIR]\n"
-               "              [--stop-after connect|S0] [--skip-vel-check]\n");
+               "              [--stop-after connect|S0|S2] [--skip-vel-check]\n");
 }
 
 std::optional<Args> ParseArgs(int argc, char** argv) {
@@ -98,7 +99,8 @@ std::optional<Args> ParseArgs(int argc, char** argv) {
     }
   }
   if (args.config.empty() || args.case_dir.empty() || args.runs < 1 ||
-      !(args.stop_after.empty() || args.stop_after == "connect" || args.stop_after == "S0")) {
+      !(args.stop_after.empty() || args.stop_after == "connect" || args.stop_after == "S0" ||
+        args.stop_after == "S2")) {
     return std::nullopt;
   }
   return args;
@@ -174,6 +176,8 @@ struct RunResult {
   std::string reason;
   int overruns = 0;
   double max_lateness_s = 0.0;
+  // Largest delay of the received command behind the sent one, -1 when the command never moved enough to tell.
+  double max_command_delay_s = -1.0;
 };
 
 class Replayer {
@@ -204,13 +208,17 @@ class Replayer {
     const DualJoints q0 = Join(feedback.left.q, feedback.right.q);
     const Timeline timeline(config_.startup, traj_, feedback.left.q, feedback.right.q, left_fk_pd_, right_fk_pd_);
     const bool stop_after_s0 = args_.stop_after == "S0";
-    const double end = stop_after_s0 ? timeline.s1_start() + config_.startup.hold_s : timeline.end();
+    const double end = stop_after_s0                ? timeline.s1_start() + config_.startup.hold_s
+                       : args_.stop_after == "S2"   ? timeline.s3_start()
+                                                    : timeline.end();
     Recorder recorder(end);
     LOG(INFO) << "Run " << run_dir.filename().string() << ": S1 at " << timeline.s1_start() << " s, S3 at "
               << timeline.s3_start() << " s, end at " << end << " s";
 
     DualJoints q_cmd = q0;
     safety_.Reset(q_cmd, 0.0);
+    CommandDelayMonitor command_delay;
+    int late_frames = 0;
     bool controller_reset = false;
     int last_waypoint = -1;
     int last_window_end = -1;
@@ -245,6 +253,19 @@ class Replayer {
       }
       if (feedback.is_new) {
         recorder.Add(FeedbackRecord{t, feedback});
+      }
+      if (feedback.is_new) {
+        const auto delay =
+            command_delay.Estimate(t, Join(feedback.left.q_cmd_received, feedback.right.q_cmd_received));
+        if (delay) {
+          result.max_command_delay_s = std::max(result.max_command_delay_s, *delay);
+          late_frames = *delay > config_.safety.max_command_delay_s ? late_frames + 1 : 0;
+        }
+        if (late_frames > config_.safety.max_command_delay_frames) {
+          result = Abort(result, "the controller receives the commands " + std::to_string(*delay * 1e3) +
+                                     " ms late, see control.send_every_ticks");
+          break;
+        }
       }
       if (t >= end) {
         break;
@@ -307,11 +328,14 @@ class Replayer {
         result = Abort(result, *violation);
         break;
       }
-      if (!robot_.Send(q_cmd.head<kDoF>(), q_cmd.tail<kDoF>())) {
-        result = Abort(result, "send: " + robot_.last_error());
-        break;
+      if (tick % config_.send_every_ticks == 0) {
+        if (!robot_.Send(q_cmd.head<kDoF>(), q_cmd.tail<kDoF>())) {
+          result = Abort(result, "send: " + robot_.last_error());
+          break;
+        }
+        command_delay.AddSent(t, q_cmd);
+        recorder.Add(SendRecord{t, stop_after_s0 ? Phase::kS0JointMove : phase, q_cmd});
       }
-      recorder.Add(SendRecord{t, stop_after_s0 ? Phase::kS0JointMove : phase, q_cmd});
     }
 
     if (recorder.overflowed()) {
@@ -428,8 +452,10 @@ class Replayer {
                  kTickS, config_.evaluate_every_ticks, horizon_s_,
                  config_.reference_mode == ReferenceMode::kLookahead ? "lookahead" : "latest", reference_window_s_,
                  reference_lead_s_);
-    std::fprintf(file, "  \"loop_overruns\": %d,\n  \"loop_max_lateness_s\": %.6f,\n", result.overruns,
-                 result.max_lateness_s);
+    std::fprintf(file,
+                 "  \"loop_overruns\": %d,\n  \"loop_max_lateness_s\": %.6f,\n  \"send_every_ticks\": %d,\n"
+                 "  \"max_command_delay_s\": %.4f,\n",
+                 result.overruns, result.max_lateness_s, config_.send_every_ticks, result.max_command_delay_s);
     WriteVector(file, "q_start", q0);
     WriteVector(file, "q_pd", Join(config_.startup.left_q_pd, config_.startup.right_q_pd), true);
     std::fprintf(file, "}\n");
@@ -560,13 +586,14 @@ int Main(const Args& args) {
 
   std::signal(SIGINT, OnSignal);
   std::signal(SIGTERM, OnSignal);
-  const int runs = args.stop_after == "S0" ? 1 : args.runs;
+  const int runs = args.stop_after.empty() ? args.runs : 1;
   bool ok = true;
   for (int i = 1; i <= runs && ok; ++i) {
     const RunResult result = replayer.Run(out / ("run_" + std::to_string(i)));
     ok = result.ok;
     LOG(INFO) << "Run " << i << (ok ? " done" : " aborted: " + result.reason) << ", loop overruns "
-              << result.overruns << ", max lateness " << result.max_lateness_s * 1e3 << " ms";
+              << result.overruns << ", max lateness " << result.max_lateness_s * 1e3 << " ms, max command delay "
+              << result.max_command_delay_s * 1e3 << " ms";
   }
   controller.Stop();
   robot->Disable();

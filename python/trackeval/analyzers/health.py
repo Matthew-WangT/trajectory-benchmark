@@ -81,19 +81,17 @@ class HealthAnalyzer(Analyzer):
         rep.metric("health.feedback_gap_max_ms", gap)
         rep.metric("health.frame_miss_delta", miss_delta)
 
-        # The controller echoes the command it received; against what was sent this shows transport delay and any
-        # command the controller dropped or rewrote.
-        q_send = _joint_columns(header_s, send, "q_send")
-        q_echo = _joint_columns(header_f, fb, "q_cmd_echo")[in_s3_fb]
-        best_lag, best_err = 0.0, np.inf
-        for lag in np.arange(0.0, 0.0105, 0.0005):
-            sent = np.column_stack([np.interp(t_fb[in_s3_fb] - lag, t_send, q_send[:, j]) for j in range(14)])
-            err = float(np.degrees(np.abs(sent - q_echo)).max())
-            if err < best_err:
-                best_lag, best_err = lag, err
-        rep.add(f"命令回显 FB_Joint_Cmd vs 下发: 最佳对齐 {best_lag * 1e3:.1f} ms, 残差 max {best_err:.4f} deg")
-        rep.metric("health.echo_lag_ms", best_lag * 1e3)
-        rep.metric("health.echo_err_max_deg", best_err)
+        # Command as received by the controller (RT_IN m_Joint_CMD_Pos) against what was sent: the transport delay.
+        # Measured position against what was sent: the whole chain up to the motion.
+        if "l_q_cmd_rx_1" in colf:
+            q_send = _joint_columns(header_s, send, "q_send")
+            rx = _joint_columns(header_f, fb, "q_cmd_rx")
+            q_meas = _joint_columns(header_f, fb, "q")
+            for name, series in (("cmd_rx", rx), ("meas", q_meas)):
+                lag, err = _best_lag(t_send, q_send, t_fb, series, in_s3_fb)
+                rep.add(f"下发 -> {name}: 最佳对齐 {lag * 1e3:.1f} ms, 残差 max {err:.4f} deg")
+                rep.metric(f"health.send_to_{name}_lag_ms", lag * 1e3)
+                rep.metric(f"health.send_to_{name}_err_max_deg", err)
         return AnalyzerResult()
 
 
@@ -101,3 +99,14 @@ def _longest_run(mask: np.ndarray) -> int:
     runs = np.diff(np.r_[False, mask, False].astype(int))
     starts, ends = np.flatnonzero(runs == 1), np.flatnonzero(runs == -1)
     return int(max((e - s for s, e in zip(starts, ends)), default=0))
+
+
+def _best_lag(t_send, q_send, t_fb, series, mask, max_lag_s=0.5):
+    """Delay of `series` behind the sent command, by the smallest max error over the lags."""
+    best_lag, best_err = 0.0, np.inf
+    for lag in np.arange(0.0, max_lag_s, 0.001):
+        sent = np.column_stack([np.interp(t_fb[mask] - lag, t_send, q_send[:, j]) for j in range(q_send.shape[1])])
+        err = float(np.degrees(np.abs(sent - series[mask])).max())
+        if err < best_err:
+            best_lag, best_err = lag, err
+    return best_lag, best_err
