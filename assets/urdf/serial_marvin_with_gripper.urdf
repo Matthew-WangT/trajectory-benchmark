@@ -1,0 +1,1144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
+     Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
+     For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
+<robot name="serial_marvin_with_gripper">
+  <link name="Link_Base">
+    <inertial>
+      <origin xyz="0 1.33E-06 0.1597" rpy="0 0 0"/>
+      <mass value="74.515"/>
+      <inertia ixx="8.67491803" ixy="0.07182226" ixz="0" iyy="8.67495749" iyz="0.00008096" izz="4.32871357"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link_Base.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.5" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link_Base.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="Link_Stand">
+    <inertial>
+      <origin xyz="1.321E-05 -4.225E-05 0.06485" rpy="0 0 0"/>
+      <mass value="3.52"/>
+      <inertia ixx="0.01763033" ixy="-0.00000075" ixz="0.00000045" iyy="0.02001856" iyz="7.41E-06" izz="0.01060882"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link_Stand.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.5" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link_Stand.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="Joint_Stand" type="fixed">
+    <origin xyz="0 0 0.981" rpy="0 0 0"/>
+    <parent link="Link_Base"/>
+    <child link="Link_Stand"/>
+    <axis xyz="0 0 0"/>
+  </joint>
+  <link name="Base_L">
+    <inertial>
+      <origin xyz="0.00032267 4.798E-05 0.04066353" rpy="0 0 0"/>
+      <mass value="1.1962"/>
+      <inertia ixx="0.00107329" ixy="-1.68E-06" ixz="-1.05E-05" iyy="0.00107003" iyz="-3.43E-06" izz="0.00127315"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Base_L.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Base_L.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="Joint0_L" type="fixed">
+    <origin xyz="0 0.037 0.140" rpy="-1.5708 0 0"/>
+    <parent link="Link_Stand"/>
+    <child link="Base_L"/>
+    <axis xyz="0 0 0"/>
+  </joint>
+  <link name="Link1_L">
+    <inertial>
+      <origin xyz="0.00002347 0.00557150 -0.03075998" rpy="0 0 0"/>
+      <mass value="1.9705"/>
+      <inertia ixx="0.00492293" ixy="0.00000550" ixz="0.00000193" iyy="0.00526513" iyz="0.00033232" izz="0.00188107"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link1_L.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link1_L.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="Joint1_L" type="revolute">
+    <origin xyz="0 0 0.1745" rpy="0 0 0"/>
+    <parent link="Base_L"/>
+    <child link="Link1_L"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.1067" upper="3.1067" effort="108" velocity="3.1416"/>
+  </joint>
+  <link name="Link2_L">
+    <inertial>
+      <origin xyz="0.00013483 0.06170460 0.00950639" rpy="0 0 0"/>
+      <mass value="2.24398"/>
+      <inertia ixx="0.01194933" ixy="0.00000336" ixz="0.00000091" iyy="0.00361581" iyz="-0.00132804" izz="0.01098356"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link2_L.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link2_L.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="Joint2_L" type="revolute">
+    <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+    <parent link="Link1_L"/>
+    <child link="Link2_L"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-2.0944" upper="2.0944" effort="108" velocity="3.1416"/>
+  </joint>
+  <link name="Link3_L">
+    <inertial>
+      <origin xyz="0.00968562 0.00246599 -0.04627302" rpy="0 0 0"/>
+      <mass value="1.9242"/>
+      <inertia ixx="0.00718224" ixy="0.00004413" ixz="0.00089552" iyy="0.00762563" iyz="0.00022096" izz="0.00178597"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link3_L.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link3_L.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="Joint3_L" type="revolute">
+    <origin xyz="0 0.287 0" rpy="-1.5708 0 0"/>
+    <parent link="Link2_L"/>
+    <child link="Link3_L"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.1067" upper="3.1067" effort="66" velocity="3.1416"/>
+  </joint>
+  <link name="Link4_L">
+    <inertial>
+      <origin xyz="0.00850411 -0.04718223 0.00941509" rpy="0 0 0"/>
+      <mass value="1.6085"/>
+      <inertia ixx="0.00580480" ixy="-0.00066669" ixz="-0.00012722" iyy="0.00223807" iyz="0.00070523" izz="0.00533060"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link4_L.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link4_L.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="Joint4_L" type="revolute">
+    <origin xyz="0.018 0 0" rpy="-1.5708 0 3.1416"/>
+    <parent link="Link3_L"/>
+    <child link="Link4_L"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-2.5007" upper="1.0472" effort="66" velocity="3.1416"/>
+  </joint>
+  <link name="Link5_L">
+    <inertial>
+      <origin xyz="0.00051127 0.00101064 -0.11271739" rpy="0 0 0"/>
+      <mass value="2.0883"/>
+      <inertia ixx="0.00626603" ixy="0.00004009" ixz="0.00005338" iyy="0.00564387" iyz="-0.00006193" izz="0.00243632"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link5_L.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link5_L.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="Joint5_L" type="revolute">
+    <origin xyz="0.018 -0.314 0" rpy="-1.5708 0 3.1416"/>
+    <parent link="Link4_L"/>
+    <child link="Link5_L"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.1067" upper="3.1067" effort="18" velocity="3.1416"/>
+  </joint>
+  <link name="Link6_L">
+    <inertial>
+      <origin xyz="0.00032659 0.00531336 -0.00030182" rpy="0 0 0"/>
+      <mass value="0.72496"/>
+      <inertia ixx="0.00046040" ixy="0.00000189" ixz="0.00000083" iyy="0.00051716" iyz="-0.00000346" izz="0.00042521"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link6_L.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link6_L.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="Joint6_L" type="revolute">
+    <origin xyz="0 0 0" rpy="1.5708 -1.5708 0"/>
+    <parent link="Link5_L"/>
+    <child link="Link6_L"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1.0472" upper="1.0472" effort="18" velocity="3.1416"/>
+  </joint>
+  <link name="Link7_L">
+    <inertial>
+      <origin xyz="-0.00009108 -0.03153255 0.00889371" rpy="0 0 0"/>
+      <mass value="0.68606"/>
+      <inertia ixx="0.00173687" ixy="-0.00000345" ixz="-0.00000116" iyy="0.00089035" iyz="0.00030680" izz="0.00139406"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link7_L.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link7_L.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="Joint7_L" type="revolute">
+    <origin xyz="0 0 0" rpy="1.5708 -1.5708 0"/>
+    <parent link="Link6_L"/>
+    <child link="Link7_L"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1.5708" upper="1.5708" effort="18" velocity="3.1416"/>
+  </joint>
+
+
+  <!-- ======================== left gripper ======================== -->
+
+  <link name="left_flange">
+    <inertial>
+      <mass value="0.263727"/>
+      <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
+      <inertia ixx="0.000351" ixy="0.0" ixz="0.0" iyy="0.00018" iyz="0.0" izz="0.00018"/>
+    </inertial>
+    <visual name="flange_visual">
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/flange.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8"/>
+      </material>
+    </visual>
+    <collision name="flange_collision">
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/flange.STL"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="left_link7_to_flange" type="fixed">
+    <parent link="Link7_L"/>
+    <child link="left_flange"/>
+    <origin xyz="0 -0.093 0" rpy="1.5708 0 0"/>
+  </joint>
+
+  <link name="left_gripper_f90c_base_link">
+    <inertial>
+      <origin xyz="-3.03438666080911E-05 0.000164444408216863 0.0415501043891079" rpy="0 0 0"/>
+      <mass value="0.682392719607843"/>
+      <inertia ixx="0.000888755805" ixy="-1.687556339e-07" ixz="-1.056753e-07" iyy="0.00065199844" iyz="5.2223703735e-07" izz="0.000466683366"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_base_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_base_link.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="left_gripper_f90c_base_joint" type="fixed">
+    <origin xyz="0 0 0.0248" rpy="0 0 0"/>
+    <parent link="left_flange"/>
+    <child link="left_gripper_f90c_base_link"/>
+  </joint>
+  <link name="left_gripper_f90c_left_1_link">
+    <inertial>
+      <origin xyz="-9.28680668570248E-19 0.030539291459314 -0.00258607700367608" rpy="0 0 0"/>
+      <mass value="0.0143082868091883"/>
+      <inertia ixx="3.13950698375337E-06" ixy="-1.52080132643556E-23" ixz="6.91547980628378E-24" iyy="1.68765500467537E-07" iyz="2.43038947287639E-07" izz="3.01776984338656E-06"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_left_1_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_left_1_link.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="left_gripper_f90c_left_1_joint" type="fixed">    <!-- revolute -->
+    <origin xyz="0 -0.030141 0.090147" rpy="1.5708 0 0"/>
+    <parent link="left_gripper_f90c_base_link"/>
+    <child link="left_gripper_f90c_left_1_link"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="0" upper="1" effort="2" velocity="1000"/>
+  </joint>
+  <link name="left_gripper_f90c_left_support_link">
+    <inertial>
+      <origin xyz="1.07295456192646E-10 0.0151471213709181 -0.00881425056266623" rpy="0 0 0"/>
+      <mass value="0.0119105654270604"/>
+      <inertia ixx="2.29855296669515E-06" ixy="3.52760274833619E-14" ixz="-4.83144274478498E-15" iyy="5.66006626841495E-07" iyz="6.96553660909406E-07" izz="2.02879732303575E-06"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_left_support_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_left_support_link.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="left_gripper_f90c_left_support_joint" type="fixed">    <!-- revolute -->
+    <origin xyz="0 0.054804 -0.0046413" rpy="0 0 0"/>
+    <parent link="left_gripper_f90c_left_1_link"/>
+    <child link="left_gripper_f90c_left_support_link"/>
+    <axis xyz="-1 0 0"/>
+    <limit lower="0" upper="0" effort="0" velocity="0"/>
+    <mimic joint="left_gripper_f90c_left_1_joint" multiplier="1" offset="0"/>
+  </joint>
+  <link name="left_gripper_f90c_left_pad_link">
+    <inertial>
+      <origin xyz="-6.16776893223986E-16 0.00343564941025751 0.00291131442785867" rpy="0 0 0"/>
+      <mass value="0.028983148227117"/>
+      <inertia ixx="8.29474554098334E-06" ixy="-1.89994985124349E-21" ixz="-8.69955081865361E-20" iyy="1.40034188740669E-06" iyz="-3.29382180279853E-08" izz="9.56613605828327E-06"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_left_pad_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_left_pad_link.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="left_gripper_f90c_left_pad_joint" type="fixed">
+    <origin xyz="0 0.0515 -0.02425" rpy="0 0 0"/>
+    <parent link="left_gripper_f90c_left_support_link"/>
+    <child link="left_gripper_f90c_left_pad_link"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="0" upper="0.045" effort="10" velocity="10"/>
+  </joint>
+  <link name="left_gripper_f90c_left_2_link">
+    <inertial>
+      <origin xyz="-9.64455187140789E-18 0.0335366982007761 -0.00283988029070185" rpy="0 0 0"/>
+      <mass value="0.0171972364497243"/>
+      <inertia ixx="3.15392174079445E-06" ixy="-7.65628822295208E-24" ixz="6.80209220247533E-22" iyy="2.70902150111044E-07" iyz="2.43381350518246E-07" izz="3.123872461982E-06"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_left_2_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_left_2_link.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="left_gripper_f90c_left_2_joint" type="fixed">    <!-- revolute -->
+    <origin xyz="0 -0.016 0.107" rpy="1.5708 0 0"/>
+    <parent link="left_gripper_f90c_base_link"/>
+    <child link="left_gripper_f90c_left_2_link"/>
+    <axis xyz="-1 0 0"/>
+    <limit lower="0" upper="0" effort="0" velocity="0"/>
+    <mimic joint="left_gripper_f90c_left_1_joint" multiplier="-1" offset="0"/>
+  </joint>
+  <link name="left_gripper_f90c_right_1_link">
+    <inertial>
+      <origin xyz="-2.12745571485216E-18 0.0305392914593139 -0.00258607700367608" rpy="0 0 0"/>
+      <mass value="0.0143082868091883"/>
+      <inertia ixx="3.13950698375336E-06" ixy="4.14549273924351E-23" ixz="2.42807909542875E-24" iyy="1.68765500467537E-07" iyz="2.43038947287639E-07" izz="3.01776984338656E-06"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_right_1_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_right_1_link.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="left_gripper_f90c_right_1_joint" type="fixed">    <!-- revolute -->
+    <origin xyz="0 0.030141 0.090147" rpy="1.5708 0 3.1416"/>
+    <parent link="left_gripper_f90c_base_link"/>
+    <child link="left_gripper_f90c_right_1_link"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="0" upper="1" effort="2" velocity="1000"/>
+    <mimic joint="left_gripper_f90c_left_1_joint" multiplier="1" offset="0"/>
+  </joint>
+  <link name="left_gripper_f90c_right_2_link">
+    <inertial>
+      <origin xyz="1.23073470736957E-17 0.033536698200776 -0.00283988029070186" rpy="0 0 0"/>
+      <mass value="0.0171972364497243"/>
+      <inertia ixx="3.15392174079445E-06" ixy="3.99539849237237E-23" ixz="-6.94115744711518E-22" iyy="2.70902150111044E-07" iyz="2.43381350518245E-07" izz="3.123872461982E-06"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_right_2_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_right_2_link.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="left_gripper_f90c_right_2_joint" type="fixed">    <!-- revolute -->
+    <origin xyz="0 0.016 0.107" rpy="1.5708 0 3.1416"/>
+    <parent link="left_gripper_f90c_base_link"/>
+    <child link="left_gripper_f90c_right_2_link"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="0" upper="0" effort="0" velocity="0"/>
+    <mimic joint="left_gripper_f90c_right_1_joint" multiplier="1" offset="0"/>
+  </joint>
+  <link name="left_gripper_f90c_right_support_link">
+    <inertial>
+      <origin xyz="1.07297655713615E-10 0.0151471213709181 -0.00881425056266621" rpy="0 0 0"/>
+      <mass value="0.0119105654270604"/>
+      <inertia ixx="2.29855296669515E-06" ixy="3.52761223264558E-14" ixz="-4.83149321191609E-15" iyy="5.66006626841495E-07" iyz="6.96553660909407E-07" izz="2.02879732303575E-06"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_right_support_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_right_support_link.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="left_gripper_f90c_right_support_joint" type="fixed">    <!-- revolute -->
+    <origin xyz="0 0.054804 -0.0046413" rpy="0 0 0"/>
+    <parent link="left_gripper_f90c_right_1_link"/>
+    <child link="left_gripper_f90c_right_support_link"/>
+    <axis xyz="-1 0 0"/>
+    <limit lower="0" upper="0" effort="0" velocity="0"/>
+    <mimic joint="left_gripper_f90c_right_1_joint" multiplier="1" offset="0"/>
+  </joint>
+  <link name="left_gripper_f90c_right_pad_link">
+    <inertial>
+      <origin xyz="-1.50137447913012E-19 0.00343564941025742 0.00291131442785872" rpy="0 0 0"/>
+      <mass value="0.028983148227117"/>
+      <inertia ixx="8.29474554098334E-06" ixy="-8.85123816078709E-22" ixz="6.94922146887372E-24" iyy="1.40034188740669E-06" iyz="-3.29382180281129E-08" izz="9.56613605828327E-06"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_right_pad_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_right_pad_link.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="left_gripper_f90c_right_pad_joint" type="fixed">
+    <origin xyz="0 0.0515 -0.02425" rpy="0 0 0"/>
+    <parent link="left_gripper_f90c_right_support_link"/>
+    <child link="left_gripper_f90c_right_pad_link"/>
+  </joint>
+  <link name="left_gripper_f90c_end_effector_link">
+    <inertial>
+      <mass value="1e-4"/>
+      <inertia ixx="1e-12" ixy="0" ixz="0" iyy="1e-12" iyz="0" izz="1e-12"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <sphere radius="0.02"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75294 0.75294 0.75294 0.5"/>
+      </material>
+    </visual>
+  </link>
+  <joint name="left_gripper_f90c_end_effector_joint" type="fixed">
+    <origin xyz="0 0 0.20226" rpy="-1.570796 -1.570796 0"/>
+    <parent link="left_gripper_f90c_base_link"/>
+    <child link="left_gripper_f90c_end_effector_link"/>
+  </joint>
+
+  <link name="Base_R">
+    <inertial>
+      <origin xyz="0.00032267 4.798E-05 0.04066353" rpy="0 0 0"/>
+      <mass value="1.1962"/>
+      <inertia ixx="0.00107329" ixy="-1.68E-06" ixz="-1.05E-05" iyy="0.00107003" iyz="-3.43E-06" izz="0.00127315"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Base_R.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Base_R.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="Joint0_R" type="fixed">
+    <origin xyz="0 -0.037 0.140" rpy="1.5708 0 0"/>
+    <parent link="Link_Stand"/>
+    <child link="Base_R"/>
+    <axis xyz="0 0 0"/>
+  </joint>
+  <link name="Link1_R">
+    <inertial>
+      <origin xyz="0.00002347 0.00557150 -0.03075998" rpy="0 0 0"/>
+      <mass value="1.9705"/>
+      <inertia ixx="0.00492293" ixy="0.00000550" ixz="0.00000193" iyy="0.00526513" iyz="0.00033232" izz="0.00188107"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link1_R.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link1_R.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="Joint1_R" type="revolute">
+    <origin xyz="0 0 0.1745" rpy="0 0 0"/>
+    <parent link="Base_R"/>
+    <child link="Link1_R"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.1067" upper="3.1067" effort="108" velocity="3.1416"/>
+  </joint>
+  <link name="Link2_R">
+    <inertial>
+      <origin xyz="0.00013483 0.06170460 0.00950639" rpy="0 0 0"/>
+      <mass value="2.24398"/>
+      <inertia ixx="0.01194933" ixy="0.00000336" ixz="0.00000091" iyy="0.00361581" iyz="-0.00132804" izz="0.01098356"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link2_R.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link2_R.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="Joint2_R" type="revolute">
+    <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+    <parent link="Link1_R"/>
+    <child link="Link2_R"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-2.0944" upper="2.0944" effort="108" velocity="3.1416"/>
+  </joint>
+  <link name="Link3_R">
+    <inertial>
+      <origin xyz="0.00968562 0.00246599 -0.04627302" rpy="0 0 0"/>
+      <mass value="1.9242"/>
+      <inertia ixx="0.00718224" ixy="0.00004413" ixz="0.00089552" iyy="0.00762563" iyz="0.00022096" izz="0.00178597"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link3_R.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link3_R.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="Joint3_R" type="revolute">
+    <origin xyz="0 0.287 0" rpy="-1.5708 0 0"/>
+    <parent link="Link2_R"/>
+    <child link="Link3_R"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.1067" upper="3.1067" effort="66" velocity="3.1416"/>
+  </joint>
+  <link name="Link4_R">
+    <inertial>
+      <origin xyz="0.00850411 -0.04718223 0.00941509" rpy="0 0 0"/>
+      <mass value="1.6085"/>
+      <inertia ixx="0.00580480" ixy="-0.00066669" ixz="-0.00012722" iyy="0.00223807" iyz="0.00070523" izz="0.00533060"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link4_R.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link4_R.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="Joint4_R" type="revolute">
+    <origin xyz="0.018 0 0" rpy="-1.5708 0 3.1416"/>
+    <parent link="Link3_R"/>
+    <child link="Link4_R"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-2.5007" upper="1.0472" effort="66" velocity="3.1416"/>
+  </joint>
+  <link name="Link5_R">
+    <inertial>
+      <origin xyz="-0.00051127 -0.00101064 -0.11271739" rpy="0 0 0"/>
+      <mass value="2.0883"/>
+      <inertia ixx="0.00626603" ixy="0.00004009" ixz="-0.00005338" iyy="0.00564387" iyz="0.00006193" izz="0.00243632"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link5_R.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link5_R.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="Joint5_R" type="revolute">
+    <origin xyz="0.018 -0.314 0" rpy="-1.5708 0 3.1416"/>
+    <parent link="Link4_R"/>
+    <child link="Link5_R"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.1067" upper="3.1067" effort="18" velocity="3.1416"/>
+  </joint>
+  <link name="Link6_R">
+    <inertial>
+      <origin xyz="0.00032659 -0.00531336 0.00030182" rpy="0 0 0"/>
+      <mass value="0.72496"/>
+      <inertia ixx="0.00046040" ixy="-0.00000189" ixz="-0.00000083" iyy="0.00051716" iyz="-0.00000346" izz="0.00042521"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link6_R.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link6_R.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="Joint6_R" type="revolute">
+    <origin xyz="0 0 0" rpy="1.5708 -1.5708 0"/>
+    <parent link="Link5_R"/>
+    <child link="Link6_R"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1.0472" upper="1.0472" effort="18" velocity="3.1416"/>
+  </joint>
+  <link name="Link7_R">
+    <inertial>
+      <origin xyz="-0.00009108 -0.03153255 0.00889371" rpy="0 0 0"/>
+      <mass value="0.68606"/>
+      <inertia ixx="0.00173687" ixy="-0.00000345" ixz="-0.00000116" iyy="0.00089035" iyz="0.00030680" izz="0.00139406"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link7_R.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/Link7_R.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="Joint7_R" type="revolute">
+    <origin xyz="0 0 0" rpy="1.5708 -1.5708 0"/>
+    <parent link="Link6_R"/>
+    <child link="Link7_R"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1.5708" upper="1.5708" effort="18" velocity="3.1416"/>
+  </joint>
+
+  <!-- ======================== right gripper ======================== -->
+
+  <link name="right_flange">
+    <inertial>
+      <mass value="0.263727"/>
+      <origin rpy="0 0 0" xyz="0.0 0.0 0.0"/>
+      <inertia ixx="0.000351" ixy="0.0" ixz="0.0" iyy="0.00018" iyz="0.0" izz="0.00018"/>
+    </inertial>
+    <visual name="flange_visual">
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/flange.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8"/>
+      </material>
+    </visual>
+    <collision name="flange_collision">
+      <geometry>
+        <mesh filename="package://resource/robot/marvin/meshes/flange.STL"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="right_link7_to_flange" type="fixed">
+    <parent link="Link7_R"/>
+    <child link="right_flange"/>
+    <origin xyz="0 -0.093 0" rpy="1.5708 3.14 0"/>
+  </joint>
+
+  <link name="right_gripper_f90c_base_link">
+    <inertial>
+      <origin xyz="-3.03438666080911E-05 0.000164444408216863 0.0415501043891079" rpy="0 0 0"/>
+      <mass value="0.682392719607843"/>
+      <inertia ixx="0.000888755805" ixy="-1.687556339e-07" ixz="-1.056753e-07" iyy="0.00065199844" iyz="5.2223703735e-07" izz="0.000466683366"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_base_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_base_link.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="right_gripper_f90c_base_joint" type="fixed">
+    <origin xyz="0 0 0.0248" rpy="0 0 0"/>
+    <parent link="right_flange"/>
+    <child link="right_gripper_f90c_base_link"/>
+  </joint>
+  <link name="right_gripper_f90c_left_1_link">
+    <inertial>
+      <origin xyz="-9.28680668570248E-19 0.030539291459314 -0.00258607700367608" rpy="0 0 0"/>
+      <mass value="0.0143082868091883"/>
+      <inertia ixx="3.13950698375337E-06" ixy="-1.52080132643556E-23" ixz="6.91547980628378E-24" iyy="1.68765500467537E-07" iyz="2.43038947287639E-07" izz="3.01776984338656E-06"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_left_1_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_left_1_link.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="right_gripper_f90c_left_1_joint" type="fixed">    <!-- revolute -->
+    <origin xyz="0 -0.030141 0.090147" rpy="1.5708 0 0"/>
+    <parent link="right_gripper_f90c_base_link"/>
+    <child link="right_gripper_f90c_left_1_link"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="0" upper="1" effort="2" velocity="1000"/>
+  </joint>
+  <link name="right_gripper_f90c_left_support_link">
+    <inertial>
+      <origin xyz="1.07295456192646E-10 0.0151471213709181 -0.00881425056266623" rpy="0 0 0"/>
+      <mass value="0.0119105654270604"/>
+      <inertia ixx="2.29855296669515E-06" ixy="3.52760274833619E-14" ixz="-4.83144274478498E-15" iyy="5.66006626841495E-07" iyz="6.96553660909406E-07" izz="2.02879732303575E-06"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_left_support_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_left_support_link.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="right_gripper_f90c_left_support_joint" type="fixed">    <!-- revolute -->
+    <origin xyz="0 0.054804 -0.0046413" rpy="0 0 0"/>
+    <parent link="right_gripper_f90c_left_1_link"/>
+    <child link="right_gripper_f90c_left_support_link"/>
+    <axis xyz="-1 0 0"/>
+    <limit lower="0" upper="0" effort="0" velocity="0"/>
+    <mimic joint="right_gripper_f90c_left_1_joint" multiplier="1" offset="0"/>
+  </joint>
+  <link name="right_gripper_f90c_left_pad_link">
+    <inertial>
+      <origin xyz="-6.16776893223986E-16 0.00343564941025751 0.00291131442785867" rpy="0 0 0"/>
+      <mass value="0.028983148227117"/>
+      <inertia ixx="8.29474554098334E-06" ixy="-1.89994985124349E-21" ixz="-8.69955081865361E-20" iyy="1.40034188740669E-06" iyz="-3.29382180279853E-08" izz="9.56613605828327E-06"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_left_pad_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_left_pad_link.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="right_gripper_f90c_left_pad_joint" type="fixed">
+    <origin xyz="0 0.0515 -0.02425" rpy="0 0 0"/>
+    <parent link="right_gripper_f90c_left_support_link"/>
+    <child link="right_gripper_f90c_left_pad_link"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="0" upper="0.045" effort="10" velocity="10"/>
+  </joint>
+  <link name="right_gripper_f90c_left_2_link">
+    <inertial>
+      <origin xyz="-9.64455187140789E-18 0.0335366982007761 -0.00283988029070185" rpy="0 0 0"/>
+      <mass value="0.0171972364497243"/>
+      <inertia ixx="3.15392174079445E-06" ixy="-7.65628822295208E-24" ixz="6.80209220247533E-22" iyy="2.70902150111044E-07" iyz="2.43381350518246E-07" izz="3.123872461982E-06"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_left_2_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_left_2_link.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="right_gripper_f90c_left_2_joint" type="fixed">    <!-- revolute -->
+    <origin xyz="0 -0.016 0.107" rpy="1.5708 0 0"/>
+    <parent link="right_gripper_f90c_base_link"/>
+    <child link="right_gripper_f90c_left_2_link"/>
+    <axis xyz="-1 0 0"/>
+    <limit lower="0" upper="0" effort="0" velocity="0"/>
+    <mimic joint="right_gripper_f90c_left_1_joint" multiplier="-1" offset="0"/>
+  </joint>
+  <link name="right_gripper_f90c_right_1_link">
+    <inertial>
+      <origin xyz="-2.12745571485216E-18 0.0305392914593139 -0.00258607700367608" rpy="0 0 0"/>
+      <mass value="0.0143082868091883"/>
+      <inertia ixx="3.13950698375336E-06" ixy="4.14549273924351E-23" ixz="2.42807909542875E-24" iyy="1.68765500467537E-07" iyz="2.43038947287639E-07" izz="3.01776984338656E-06"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_right_1_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_right_1_link.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="right_gripper_f90c_right_1_joint" type="fixed">    <!-- revolute -->
+    <origin xyz="0 0.030141 0.090147" rpy="1.5708 0 3.1416"/>
+    <parent link="right_gripper_f90c_base_link"/>
+    <child link="right_gripper_f90c_right_1_link"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="0" upper="1" effort="2" velocity="1000"/>
+    <mimic joint="right_gripper_f90c_left_1_joint" multiplier="1" offset="0"/>
+  </joint>
+  <link name="right_gripper_f90c_right_2_link">
+    <inertial>
+      <origin xyz="1.23073470736957E-17 0.033536698200776 -0.00283988029070186" rpy="0 0 0"/>
+      <mass value="0.0171972364497243"/>
+      <inertia ixx="3.15392174079445E-06" ixy="3.99539849237237E-23" ixz="-6.94115744711518E-22" iyy="2.70902150111044E-07" iyz="2.43381350518245E-07" izz="3.123872461982E-06"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_right_2_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_right_2_link.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="right_gripper_f90c_right_2_joint" type="fixed">    <!-- revolute -->
+    <origin xyz="0 0.016 0.107" rpy="1.5708 0 3.1416"/>
+    <parent link="right_gripper_f90c_base_link"/>
+    <child link="right_gripper_f90c_right_2_link"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="0" upper="0" effort="0" velocity="0"/>
+    <mimic joint="right_gripper_f90c_right_1_joint" multiplier="1" offset="0"/>
+  </joint>
+  <link name="right_gripper_f90c_right_support_link">
+    <inertial>
+      <origin xyz="1.07297655713615E-10 0.0151471213709181 -0.00881425056266621" rpy="0 0 0"/>
+      <mass value="0.0119105654270604"/>
+      <inertia ixx="2.29855296669515E-06" ixy="3.52761223264558E-14" ixz="-4.83149321191609E-15" iyy="5.66006626841495E-07" iyz="6.96553660909407E-07" izz="2.02879732303575E-06"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_right_support_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_right_support_link.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="right_gripper_f90c_right_support_joint" type="fixed">    <!-- revolute -->
+    <origin xyz="0 0.054804 -0.0046413" rpy="0 0 0"/>
+    <parent link="right_gripper_f90c_right_1_link"/>
+    <child link="right_gripper_f90c_right_support_link"/>
+    <axis xyz="-1 0 0"/>
+    <limit lower="0" upper="0" effort="0" velocity="0"/>
+    <mimic joint="right_gripper_f90c_right_1_joint" multiplier="1" offset="0"/>
+  </joint>
+  <link name="right_gripper_f90c_right_pad_link">
+    <inertial>
+      <origin xyz="-1.50137447913012E-19 0.00343564941025742 0.00291131442785872" rpy="0 0 0"/>
+      <mass value="0.028983148227117"/>
+      <inertia ixx="8.29474554098334E-06" ixy="-8.85123816078709E-22" ixz="6.94922146887372E-24" iyy="1.40034188740669E-06" iyz="-3.29382180281129E-08" izz="9.56613605828327E-06"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_right_pad_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75 0.75 0.75 0.8"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://resource/robot/gripper_f90c/meshes/gripper_f90c_right_pad_link.STL"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="right_gripper_f90c_right_pad_joint" type="fixed">
+    <origin xyz="0 0.0515 -0.02425" rpy="0 0 0"/>
+    <parent link="right_gripper_f90c_right_support_link"/>
+    <child link="right_gripper_f90c_right_pad_link"/>
+  </joint>
+  <link name="right_gripper_f90c_end_effector_link">
+    <inertial>
+      <mass value="1e-4"/>
+      <inertia ixx="1e-12" ixy="0" ixz="0" iyy="1e-12" iyz="0" izz="1e-12"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <sphere radius="0.02"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75294 0.75294 0.75294 0.5"/>
+      </material>
+    </visual>
+  </link>
+  <joint name="right_gripper_f90c_end_effector_joint" type="fixed">
+    <origin xyz="0 0 0.20226" rpy="1.570796 -1.570796 0"/>
+    <parent link="right_gripper_f90c_base_link"/>
+    <child link="right_gripper_f90c_end_effector_link"/>
+  </joint>
+</robot>

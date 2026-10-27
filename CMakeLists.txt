@@ -1,0 +1,36 @@
+cmake_minimum_required(VERSION 3.16)
+project(eef_trajectory_benchmark LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+# Shared libraries are loaded from the build tree, the project is never installed.
+set(CMAKE_BUILD_RPATH_USE_ORIGIN ON)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
+option(BUILD_TESTS "Build the unit tests" ON)
+
+find_package(Threads REQUIRED)
+find_package(OpenMP REQUIRED)
+find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+find_package(Boost REQUIRED COMPONENTS system filesystem log_setup log thread serialization)
+find_package(pinocchio 3.7 REQUIRED)
+find_package(hpp-fcl 2 REQUIRED)
+find_package(urdfdom REQUIRED)
+find_package(glog REQUIRED)
+find_package(yaml-cpp REQUIRED)
+
+add_subdirectory(third_party/marvin_sdk)
+add_subdirectory(third_party/ocs2)
+add_subdirectory(src)
+
+if(BUILD_TESTS)
+  enable_testing()
+  find_package(GTest REQUIRED)
+  add_subdirectory(tests)
+endif()

@@ -1,0 +1,82 @@
+# Replay configuration of the Marvin dual arms. Joint values in rad, relative paths against this folder.
+# Defaults are the ones of the reference pipeline on marvin1 (infer-06).
+
+robot:
+  ip: 192.168.1.190
+  # CPU of the SDK 1 ms network thread and of the 1 ms SCHED_FIFO control loop, -1 leaves it to the OS.
+  sdk_cpu: 11
+  rt_cpu: 10
+  rt_priority: 80
+  log_switch: 0
+
+# Joint impedance, the only control mode of the benchmark. Gains are written once when entering the mode.
+control:
+  joint_stiffness:
+    left: [22, 22, 22, 15, 8, 8, 8]
+    right: [22, 22, 22, 15, 8, 8, 8]
+  joint_damping:
+    left: [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3]
+    right: [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3]
+  vel_ratio: 100
+  acc_ratio: 100
+  # PD velocity feedforward of the controller, needs JointPIDCtlType=1 in robot.ini.
+  enable_vel_feedforward: true
+  vel_feedforward_step_ms: 2
+  # The command is sent every 1 ms tick and the IK controller evaluated every 2 ticks, as in the reference pipeline.
+  evaluate_every_ticks: 2
+
+# Tool written to the controller, used by its gravity compensation.
+# kine: X, Y, Z in mm and A, B, C in deg of the tool from the flange.
+# dyn: mass in kg, center of mass x, y, z in mm, Ixx, Ixy, Ixz, Iyy, Iyz, Izz.
+# Values of the F90C gripper; set dyn to zeros when running without load. The TCP of the trajectories is the virtual
+# 0.227 m offset of the URDF either way.
+tool:
+  left:
+    kine: [0, 0, 0, 0, 0, 0]
+    dyn: [1.232, -16.852, -6.870, 76.460, 0.001, 0.000, 0.000, 0.030, 0.000, 0.001]
+  right:
+    kine: [0, 0, 0, 0, 0, 0]
+    dyn: [1.493, -1.586, 1.559, 74.374, 0.001, 0.000, 0.000, 0.001, 0.000, 0.001]
+
+mpc:
+  controller: ocs2/controller.yaml
+  urdf: ../assets/urdf/serial_marvin_with_gripper.urdf
+  # Reference given to the MPC, always starting at the pose of the last command now:
+  #   lookahead: the trajectory waypoints due within the next reference_window_s (0 = MPC horizon, 0.2 s), the chunk
+  #              the controller gets in the reference pipeline. Deviates from rule 3.3 (no lookahead) of
+  #              docs/test_requirements.md and has to be stated as such in the report.
+  #   latest:    only the newest received waypoint, placed at now + reference_lead_s (0 = MPC horizon), no lookahead.
+  reference_mode: lookahead
+  reference_window_s: 0
+  reference_lead_s: 0
+  # The controller runs this long before the first run without commanding the robot, so the slow first solves do not
+  # show up as a transient at the start of the first S1.
+  warm_up_s: 1.0
+
+startup:
+  # S0 target, the PD stand pose of the reference pipeline.
+  q_pd:
+    left: [0.40, 0.30, 0.27, -2.43, 0.36, 0.05, 0.12]
+    right: [-0.37, 0.14, -0.36, -2.46, -0.39, 0.18, -0.28]
+  joint_speed_rad_s: 0.3
+  joint_min_duration_s: 3.0
+  # S1 TCP move from the S0 pose to the start pose of the case.
+  eef_linear_speed_m_s: 0.1
+  eef_angular_speed_rad_s: 0.5
+  eef_min_duration_s: 3.0
+  eef_waypoint_rate_hz: 200.0
+  hold_s: 2.0
+  end_hold_s: 2.0
+
+safety:
+  max_joint_track_err_rad: 0.3
+  max_cmd_joint_vel_rad_s: 10.5
+  joint_limit_margin_rad: 0.02
+  feedback_timeout_s: 0.02
+  max_consecutive_holds: 50
+  max_initial_deviation_rad: 2.0
+  min_tcp_distance_m: 0.15
+  max_feedforward_joint_vel_deg_s: 180.0
+
+dry_run:
+  time_constant_s: 0.01
