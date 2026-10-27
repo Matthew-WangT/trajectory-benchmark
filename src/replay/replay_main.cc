@@ -23,6 +23,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -62,12 +63,15 @@ struct Args {
   // trajectory (S3), so that only the slow moves run.
   std::string stop_after;
   bool skip_vel_check = false;
+  // Prints the key settings of the config and exits.
+  bool show_config = false;
 };
 
 void PrintUsage() {
   std::fprintf(stderr,
                "usage: replay --config CONFIG --case CASE_DIR [--runs N] [--dry-run] [--out DIR]\n"
-               "              [--stop-after connect|S0|S2] [--skip-vel-check]\n");
+               "              [--stop-after connect|S0|S2] [--skip-vel-check]\n"
+               "       replay --config CONFIG --show-config\n");
 }
 
 std::optional<Args> ParseArgs(int argc, char** argv) {
@@ -94,11 +98,13 @@ std::optional<Args> ParseArgs(int argc, char** argv) {
       args.stop_after = next();
     } else if (arg == "--skip-vel-check") {
       args.skip_vel_check = true;
+    } else if (arg == "--show-config") {
+      args.show_config = true;
     } else {
       return std::nullopt;
     }
   }
-  if (args.config.empty() || args.case_dir.empty() || args.runs < 1 ||
+  if (args.config.empty() || (args.case_dir.empty() && !args.show_config) || args.runs < 1 ||
       !(args.stop_after.empty() || args.stop_after == "connect" || args.stop_after == "S0" ||
         args.stop_after == "S2")) {
     return std::nullopt;
@@ -504,8 +510,37 @@ bool CheckDryRunVelocity(const std::filesystem::path& path, double limit) {
   return true;
 }
 
+std::string Format(const arm::JointVector& v) {
+  std::ostringstream text;
+  text << "[" << v.transpose().format(Eigen::IOFormat(4, Eigen::DontAlignCols, ", ", ", ")) << "]";
+  return text.str();
+}
+
+void ShowConfig(const ReplayConfig& config) {
+  const arm::ControlConfig& control = config.robot.control;
+  auto loaded = [](const arm::ToolConfig& tool) {
+    return std::any_of(tool.dyn.begin(), tool.dyn.end(), [](double v) { return v != 0.0; });
+  };
+  std::printf("robot ip             %s\n", config.robot.ip.c_str());
+  std::printf("stiffness left       %s\n", Format(control.left.stiffness).c_str());
+  std::printf("stiffness right      %s\n", Format(control.right.stiffness).c_str());
+  std::printf("damping left         %s\n", Format(control.left.damping).c_str());
+  std::printf("damping right        %s\n", Format(control.right.damping).c_str());
+  std::printf("velocity feedforward %s, step %d ms; send every %d ms, IK every %d ms\n",
+              control.enable_vel_feedforward ? "on" : "off", control.vel_feedforward_step_ms,
+              config.send_every_ticks, config.evaluate_every_ticks);
+  std::printf("tool dyn             left %s, right %s\n", loaded(config.robot.left_tool) ? "set" : "zeros (no load)",
+              loaded(config.robot.right_tool) ? "set" : "zeros (no load)");
+  std::printf("IK reference         %s\n",
+              config.reference_mode == ReferenceMode::kLookahead ? "lookahead (trajectory chunk)" : "latest waypoint");
+}
+
 int Main(const Args& args) {
   const ReplayConfig config = LoadReplayConfig(args.config);
+  if (args.show_config) {
+    ShowConfig(config);
+    return 0;
+  }
   const CaseTrajectory traj = LoadCase(args.case_dir);
   const double min_distance = traj.MinTcpDistance();
   if (min_distance < config.safety.min_tcp_distance_m) {

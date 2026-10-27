@@ -16,14 +16,15 @@ scripts/bag_to_csv.py   bag → CSV（可选；pip install "rosbags>=0.11" numpy
 
 ## Marvin 基线复现与评价
 
-Marvin 上的回放程序（OCS2 滚动时域 IK + 关节阻抗）、交付 CSV 生成和评价脚本都在本仓库里，用 `docker/` 下的容器构建和运行，见 [docs/replay.md](docs/replay.md)。`scripts/evaluate.py` 也能直接评价按第 4 节格式交回的任何 CSV。
+Marvin 上的回放程序（OCS2 滚动时域 IK + 关节阻抗）、交付 CSV 生成和评价脚本都在本仓库里。执行 `./benchmark.sh`，在菜单里选择模式、用例和配置，之后会自动完成 replay、评价，并打印结果，见 [docs/replay.md](docs/replay.md)。`scripts/evaluate.py` 也能直接评价按第 4 节格式交回的任何 CSV。
 
 ```
 src/          replay 程序：mpc/（移植的 IK controller）、arm/（Marvin SDK / dry-run）、replay/（时间轴、安全、录制）
 config/       marvin.yaml（增益、工具、起始与安全参数）、ocs2/（IK controller 与 task .info）
 third_party/  Marvin 控制 SDK（Apache-2.0）、OCS2 子集（BSD-3）
 python/       trackeval 评价包
-scripts/      make_delivery_csv.py、evaluate.py、summarize.py
+benchmark.sh  唯一入口：构建 + 菜单 + replay + 评价 + 打印
+scripts/      benchmark.py（菜单与流程）、make_delivery_csv.py、evaluate.py、summarize.py
 ```
 
 | 用例 | 线速度 p99 / max（左，右） | 角速度 p99 / max（左，右） | 两臂最小间距 |

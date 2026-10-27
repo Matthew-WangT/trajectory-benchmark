@@ -42,49 +42,45 @@ eef_command.csv ──> OCS2 滚动时域 IK ──q_cmd──> 关节阻抗 (SD
 
 ## 步骤
 
-所有命令都在容器里执行：
+只需要一条命令，在宿主机上执行（需要 docker；第一次运行会构建镜像：pinocchio 3.7.0 + hpp-fcl 2.4.5 源码编译）：
 
 ```bash
-docker/run.sh                  # 第一次会构建镜像（pinocchio 3.7.0 + hpp-fcl 2.4.5 源码编译）
-docker/build.sh                # 编译到 build/
-ctest --test-dir build         # 单元测试；test_mpc_smoke 第一次运行会生成 CppAD 库，要几分钟
+./benchmark.sh
 ```
 
-1. **dry-run**：不连真机，`FakeArm` 用 10 ms 一阶滞后来模拟。用来验证整条链路，并测出关节速度峰值：
+它会自动增量编译（日志在 `build/build.log`），然后用方向键菜单依次选择（↑/↓ 或 j/k，Enter 确认，q 退出）：
 
-   ```bash
-   build/bin/replay --config config/marvin.yaml --case data/case02_fold_clothes_spd50 --dry-run
-   ```
+1. **模式**：真机 / dry-run（不连机器人，`FakeArm` 用 10 ms 一阶滞后模拟）
+2. **用例**：`data/` 下的所有用例
+3. **配置**：`config/*.yaml`（只有一个文件时自动选中）
+4. **运行**：完整用例 3 次 / 1 次，或者分步上机的阶段：
+   - `connect`：只做连接、`robot.ini` 检查、读反馈
+   - `S0`：只做关节插值到 `q_pd`，然后保持
+   - `S2`：只跑 S0–S2（慢速移到起始位姿并静止），不跑轨迹
 
-   CppAD 库缓存在 `runs/.cppad_cache`，只有第一次需要生成。
+接着打印配置摘要（IP、增益、速度前馈、下发节拍、负载、IK 参考模式）。真机模式下要按 Enter 确认后才开始。之后全部自动完成：
 
-2. **真机，分步上机**：
+- 真机跑完整用例时，如果这个用例还没有 dry-run 结果，会先自动跑一次 dry-run（检查关节速度不超过 180 deg/s）
+- replay：终端只显示关键行，完整日志在 `<session>/replay.log`
+- 对每次完成的 run 生成交付 CSV 并评价，最后汇总
+- 终端打印结果表：两臂各自的关节误差、关节时延、TCP 误差，取多次运行的均值 [min, max]
 
-   ```bash
-   B="build/bin/replay --config config/marvin.yaml --case data/case02_fold_clothes_spd50"
-   $B --stop-after connect      # 只做连接、robot.ini 检查和读反馈
-   $B --stop-after S0           # 只做 S0 加保持
-   $B --runs 1                  # 跑一次完整用例
-   $B                           # 连续 3 次
-   ```
+Ctrl-C 会让 replay 走 abort 流程（停止更新命令、下使能、抱闸），已完成的 run 照常评价。
 
-   输出在 `runs/<case>/real_<时间戳>/run_<i>/`，包括 `raw_cmd.csv`（500 Hz）、`raw_send.csv`（1 kHz）、`raw_fb.csv`（每个新反馈帧一行）、`run_info.json`，还有 `robot.ini` 的副本。
+输出在 `runs/<case>/<real|dry>_<时间戳>/`：`replay.log`、`summary.txt`；每个 `run_<i>/` 里有 `raw_cmd.csv`（500 Hz）、`raw_send.csv`、`raw_fb.csv`（每个新反馈帧一行，含控制器收到的命令）、`run_info.json`、`delivery.csv`（第 4 节交付格式）、`report/`（`report.txt`、`metrics.json`、图）。
 
-3. **交付 CSV 和评价**：
+所有菜单项也都可以从命令行直接指定，不再询问：
 
-   ```bash
-   S=runs/case02_fold_clothes_spd50/real_<时间戳>
-   for r in $S/run_*; do
-     python3 scripts/make_delivery_csv.py $r && python3 scripts/evaluate.py $r
-   done
-   python3 scripts/summarize.py $S
-   ```
+```bash
+./benchmark.sh --mode dry --case case02_fold_clothes_spd50 --runs 3 -y
+./benchmark.sh --mode real --case case02_fold_clothes_spd50 --stage S2
+```
 
-   外部公司交回的 CSV 也用同一个脚本评价（没有 URDF，依赖模型的阶段会自动跳过）：
+外部公司交回的 CSV 用同一套评价（没有 URDF，依赖模型的阶段会自动跳过）：
 
-   ```bash
-   python3 scripts/evaluate.py their.csv --reference data/case02_fold_clothes_spd50/eef_command.csv
-   ```
+```bash
+docker/run.sh python3 scripts/evaluate.py their.csv --reference data/case02_fold_clothes_spd50/eef_command.csv
+```
 
 ## 报告内容
 
