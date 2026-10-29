@@ -175,6 +175,7 @@ ManipulatorModelInfo createManipulatorModelInfo(const PinocchioInterface& interf
   }
   // store frame names for using later.
   info.eeFrame = eeFrame;
+  info.eeFrames = {eeFrame};
   info.baseFrame = baseFrame;
   // get name of arm joints.
   const auto& jointNames = model.names;

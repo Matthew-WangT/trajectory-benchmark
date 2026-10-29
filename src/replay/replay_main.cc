@@ -39,12 +39,14 @@
 
 #include "arm/fake_arm.h"
 #include "arm/marvin_arm.h"
-#include "mpc/dual_arm_ocs2_ik_controller.h"
+#include "mpc/ik_controller.h"
 #include "replay/config.h"
 #include "replay/recorder.h"
 #include "replay/safety.h"
 #include "replay/timeline.h"
 #include "replay/trajectory.h"
+#include "s1/s1_config.h"
+#include "s1/s1_replay.h"
 
 namespace replay {
 namespace {
@@ -146,8 +148,9 @@ std::string Timestamp() {
   return buffer;
 }
 
-DualJoints Join(const arm::JointVector& left, const arm::JointVector& right) {
-  DualJoints q;
+// Joint vector of a fixed-base dual arm from its two arms.
+Joints Join(const arm::JointVector& left, const arm::JointVector& right) {
+  Joints q(2 * kDoF);
   q << left, right;
   return q;
 }
@@ -158,11 +161,14 @@ Eigen::Matrix<double, 7, 1> PoseVector(const Eigen::Isometry3d& pose) {
   return v;
 }
 
-void LoadJointLimits(const RobotModelConfig& robot, DualJoints& lower, DualJoints& upper) {
+void LoadJointLimits(const RobotModelConfig& robot, Joints& lower, Joints& upper) {
   const urdf::ModelInterfaceSharedPtr model = urdf::parseURDFFile(robot.urdf);
   CHECK(model) << "Cannot parse " << robot.urdf;
-  for (int i = 0; i < 2 * kDoF; ++i) {
-    const std::string& name = i < kDoF ? robot.left_joints[i] : robot.right_joints[i - kDoF];
+  const std::vector<std::string> names = robot.JointNames();
+  lower.resize(robot.dof());
+  upper.resize(robot.dof());
+  for (int i = 0; i < robot.dof(); ++i) {
+    const std::string& name = names[i];
     const urdf::JointConstSharedPtr joint = model->getJoint(name);
     CHECK(joint && joint->limits) << "Joint " << name << " without limits in " << robot.urdf;
     lower[i] = joint->limits->lower;
@@ -192,7 +198,7 @@ std::string SetupRealtime(int cpu, int priority) {
   return issues;
 }
 
-void WriteVector(std::FILE* file, const char* name, const DualJoints& q, bool last = false) {
+void WriteVector(std::FILE* file, const char* name, const Joints& q, bool last = false) {
   std::fprintf(file, "  \"%s\": [", name);
   for (int i = 0; i < q.size(); ++i) {
     std::fprintf(file, "%s%.9g", i ? ", " : "", q[i]);
@@ -212,8 +218,8 @@ struct RunResult {
 class Replayer {
  public:
   Replayer(const ReplayConfig& config, const CaseTrajectory& traj, const Args& args,
-           controller::DualArmOcs2IkController& controller, arm::ArmInterface& robot, double horizon_s,
-           const DualJoints& lower, const DualJoints& upper)
+           controller::IkController& controller, arm::ArmInterface* robot, double horizon_s, const Joints& lower,
+           const Joints& upper)
       : config_(config),
         traj_(traj),
         args_(args),
@@ -222,30 +228,33 @@ class Replayer {
         horizon_s_(horizon_s),
         reference_lead_s_(config.model.reference_lead_s > 0.0 ? config.model.reference_lead_s : horizon_s),
         reference_window_s_(config.model.reference_window_s > 0.0 ? config.model.reference_window_s : horizon_s),
-        safety_(config.safety, lower, upper) {
-    controller_.GetEePoses(Join(config.model.startup.left_q_pd, config.model.startup.right_q_pd), left_fk_pd_,
-                           right_fk_pd_);
+        safety_(config.safety, lower, upper, config.model.JointNames()) {
+    controller_.GetEePoses(config.model.startup.QPd(), left_fk_pd_, right_fk_pd_);
   }
 
   RunResult Run(const std::filesystem::path& run_dir) {
     RunResult result;
     arm::Feedback feedback;
-    if (!ReadNewFeedback(feedback)) {
-      result.ok = false;
-      result.reason = "no feedback before the run: " + robot_.last_error();
-      return result;
+    // The solve has no robot, it starts at q_pd and its command is the measurement.
+    Joints q0 = config_.model.startup.QPd();
+    if (robot_ != nullptr) {
+      if (!ReadNewFeedback(feedback)) {
+        result.ok = false;
+        result.reason = "no feedback before the run: " + robot_->last_error();
+        return result;
+      }
+      q0 = Join(feedback.left.q, feedback.right.q);
     }
-    const DualJoints q0 = Join(feedback.left.q, feedback.right.q);
-    const Timeline timeline(config_.model.startup, traj_, feedback.left.q, feedback.right.q, left_fk_pd_, right_fk_pd_);
+    const Timeline timeline(config_.model.startup, traj_, q0, left_fk_pd_, right_fk_pd_);
     const bool stop_after_s0 = args_.stop_after == "S0";
     const double end = stop_after_s0                ? timeline.s1_start() + config_.model.startup.hold_s
                        : args_.stop_after == "S2"   ? timeline.s3_start()
                                                     : timeline.end();
-    Recorder recorder(end);
+    Recorder recorder(end, config_.model.torso_dof());
     LOG(INFO) << "Run " << run_dir.filename().string() << ": S1 at " << timeline.s1_start() << " s, S3 at "
               << timeline.s3_start() << " s, end at " << end << " s";
 
-    DualJoints q_cmd = q0;
+    Joints q_cmd = q0;
     safety_.Reset(q_cmd, 0.0);
     CommandDelayMonitor command_delay;
     int late_frames = 0;
@@ -278,12 +287,14 @@ class Replayer {
         result = Abort(result, "interrupted");
         break;
       }
-      if (!robot_.Read(feedback)) {
-        result = Abort(result, "feedback: " + robot_.last_error());
-        break;
-      }
-      if (feedback.is_new) {
-        recorder.Add(FeedbackRecord{t, feedback});
+      if (robot_ != nullptr) {
+        if (!robot_->Read(feedback)) {
+          result = Abort(result, "feedback: " + robot_->last_error());
+          break;
+        }
+        if (feedback.is_new) {
+          recorder.Add(FeedbackRecord{t, feedback});
+        }
       }
       if (feedback.is_new && !args_.solve) {
         const auto delay =
@@ -308,9 +319,7 @@ class Replayer {
       bool held = false;
       int waypoint = -1;
       if (phase == Phase::kS0JointMove || stop_after_s0) {
-        arm::JointVector left_q, right_q;
-        timeline.JointCommand(t, left_q, right_q);
-        q_cmd = Join(left_q, right_q);
+        q_cmd = timeline.JointCommand(t);
       } else if (evaluate_tick) {
         if (!controller_reset) {
           // Seeded with the last command rather than the measurement, so the command does not jump.
@@ -371,15 +380,16 @@ class Replayer {
           break;
         }
       } else {
-        const DualJoints q_meas = Join(feedback.left.q, feedback.right.q);
+        const Joints q_meas = Join(feedback.left.q, feedback.right.q);
         if (const auto violation = safety_.Check(t, q_cmd, q_meas, feedback.is_new, evaluated, held)) {
           result = Abort(result, *violation);
           break;
         }
       }
       if (tick % config_.model.send_every_ticks == 0) {
-        if (!robot_.Send(q_cmd.head<kDoF>(), q_cmd.tail<kDoF>())) {
-          result = Abort(result, "send: " + robot_.last_error());
+        if (robot_ != nullptr && !robot_->Send(q_cmd.segment<kDoF>(config_.model.left_offset()),
+                                               q_cmd.segment<kDoF>(config_.model.right_offset()))) {
+          result = Abort(result, "send: " + robot_->last_error());
           break;
         }
         command_delay.AddSent(t, q_cmd);
@@ -399,8 +409,7 @@ class Replayer {
   // lookahead: the waypoints due in (t, t + window], the trajectory chunk the controller gets in the reference
   //   pipeline; without any (end of the trajectory) the newest received waypoint is held to the end of the horizon.
   // latest: only the newest received waypoint, at now + reference_lead and held beyond; nothing of the future.
-  void SetReference(const Timeline& timeline, double t, double now, const DualJoints& q_cmd, int latest,
-                    int window_end) {
+  void SetReference(const Timeline& timeline, double t, double now, const Joints& q_cmd, int latest, int window_end) {
     const std::vector<Waypoint>& waypoints = timeline.waypoints();
     std::vector<double> times{now};
     std::vector<Eigen::Isometry3d> left(1), right(1);
@@ -422,7 +431,7 @@ class Replayer {
   // Runs the started controller for `duration_s` toward the static TCP poses of `q`, nothing is sent to the robot.
   // The first solves after start-up are slow, which without this shows up as a fast transient at the start of the
   // first S1; the warm solver state survives the Reset of each run.
-  void WarmUp(const DualJoints& q, double duration_s) {
+  void WarmUp(const Joints& q, double duration_s) {
     Eigen::Isometry3d left_pose, right_pose;
     controller_.GetEePoses(q, left_pose, right_pose);
     const double start = MonotonicSeconds();
@@ -438,7 +447,9 @@ class Replayer {
  private:
   RunResult Abort(RunResult result, const std::string& reason) {
     // Stop updating the command and disable at once, the brakes hold the arms.
-    robot_.Disable();
+    if (robot_ != nullptr) {
+      robot_->Disable();
+    }
     result.ok = false;
     result.reason = reason;
     LOG(ERROR) << "Abort: " << reason;
@@ -447,7 +458,7 @@ class Replayer {
 
   bool ReadNewFeedback(arm::Feedback& feedback) {
     for (int i = 0; i < 100; ++i) {
-      if (!robot_.Read(feedback)) {
+      if (!robot_->Read(feedback)) {
         return false;
       }
       if (feedback.is_new) {
@@ -458,7 +469,7 @@ class Replayer {
     return false;
   }
 
-  void WriteRunInfo(const std::filesystem::path& run_dir, const Timeline& timeline, const DualJoints& q0,
+  void WriteRunInfo(const std::filesystem::path& run_dir, const Timeline& timeline, const Joints& q0,
                     const RunResult& result, bool stop_after_s0) const {
     std::FILE* file = std::fopen((run_dir / "run_info.json").c_str(), "w");
     if (file == nullptr) {
@@ -488,7 +499,7 @@ class Replayer {
                  "  \"max_command_delay_s\": %.4f,\n",
                  result.overruns, result.max_lateness_s, config_.model.send_every_ticks, result.max_command_delay_s);
     WriteVector(file, "q_start", q0);
-    WriteVector(file, "q_pd", Join(config_.model.startup.left_q_pd, config_.model.startup.right_q_pd), true);
+    WriteVector(file, "q_pd", config_.model.startup.QPd(), true);
     std::fprintf(file, "}\n");
     std::fclose(file);
   }
@@ -496,8 +507,9 @@ class Replayer {
   const ReplayConfig& config_;
   const CaseTrajectory& traj_;
   const Args& args_;
-  controller::DualArmOcs2IkController& controller_;
-  arm::ArmInterface& robot_;
+  controller::IkController& controller_;
+  // Null in the solve.
+  arm::ArmInterface* robot_;
   double horizon_s_;
   double reference_lead_s_;
   double reference_window_s_;
@@ -569,7 +581,35 @@ ReplayConfig SolveConfigOf(const std::string& robot_dir) {
   return config;
 }
 
+// The S1 replay through the SDK sidecar (a config with a bridge section), see src/s1/s1_replay.h.
+int MainS1(const Args& args) {
+  if (args.dry_run || args.show_config) {
+    LOG(ERROR) << "The S1 config has no dry run and no --show-config, run scripts/s1_bridge.py --fake instead";
+    return 1;
+  }
+  const s1::S1Config config = s1::LoadS1Config(args.config);
+  const CaseTrajectory traj = LoadCase(args.case_dir);
+  const std::filesystem::path runs_root = std::filesystem::path(config.model.dir) / ".." / ".." / "runs";
+  const std::filesystem::path out =
+      !args.out.empty() ? std::filesystem::path(args.out)
+                        : std::filesystem::weakly_canonical(runs_root / traj.name) / ("real_" + Timestamp());
+  std::filesystem::create_directories(out);
+  if (!args.skip_vel_check && !CheckSolveResult(args.solve_result, traj.name, config.model.name)) {
+    return 1;
+  }
+  s1::Options options;
+  options.config = args.config;
+  options.case_dir = args.case_dir;
+  options.out = out.string();
+  options.runs = args.runs;
+  options.stop_after = args.stop_after;
+  return s1::RunReplay(options);
+}
+
 int Main(const Args& args) {
+  if (!args.solve && s1::IsS1Config(args.config)) {
+    return MainS1(args);
+  }
   const ReplayConfig config = args.solve ? SolveConfigOf(args.robot) : LoadReplayConfig(args.config);
   if (args.show_config) {
     ShowConfig(config);
@@ -598,59 +638,71 @@ int Main(const Args& args) {
     return 1;
   }
 
-  DualJoints lower, upper;
+  Joints lower, upper;
   LoadJointLimits(config.model, lower, upper);
   const controller::Ocs2IkControllerConfig controller_config =
       controller::LoadOcs2IkControllerConfig(config.model.controller_yaml);
   double horizon_s = 0.0;
-  ocs2::loadData::loadCppDataType(controller_config.left_info, "mpc.timeHorizon", horizon_s);
+  ocs2::loadData::loadCppDataType(
+      controller_config.type == "whole_body" ? controller_config.info : controller_config.left_info, "mpc.timeHorizon",
+      horizon_s);
   LOG(INFO) << "Building the IK controller, the first build generates the CppAD libraries and takes minutes";
-  controller::DualArmOcs2IkController controller(config.model.urdf, controller_config);
+  const std::unique_ptr<controller::IkController> controller =
+      controller::MakeIkController(config.model.urdf, controller_config);
+  CHECK_EQ(controller->dof(), config.model.dof())
+      << config.model.controller_yaml << " and " << config.model.dir << "/robot.yaml disagree on the joint count";
 
+  // The solve has no robot. The replay drives a fixed-base dual arm: Marvin, or its first order lag model.
   std::unique_ptr<arm::ArmInterface> robot;
-  if (args.dry_run || args.solve) {
-    robot = std::make_unique<arm::FakeArm>(config.model.startup.left_q_pd, config.model.startup.right_q_pd,
-                                           config.dry_run_time_constant_s);
-  } else {
-    robot = std::make_unique<arm::MarvinArm>(config.robot);
-  }
-  if (!robot->Connect() || !robot->CheckRobotIni((out / "robot.ini").string())) {
-    LOG(ERROR) << robot->last_error();
-    robot->Disable();
-    return 1;
-  }
-  arm::Feedback feedback;
-  if (!robot->Read(feedback)) {
-    LOG(ERROR) << robot->last_error();
-    robot->Disable();
-    return 1;
-  }
-  const DualJoints q_meas = Join(feedback.left.q, feedback.right.q);
-  const DualJoints q_pd = Join(config.model.startup.left_q_pd, config.model.startup.right_q_pd);
-  const double deviation = (q_meas - q_pd).cwiseAbs().maxCoeff();
-  LOG(INFO) << "Measured joints " << q_meas.transpose() << ", largest deviation from q_pd " << deviation << " rad";
-  if (deviation > config.safety.max_initial_deviation_rad) {
-    LOG(ERROR) << "Joints are " << deviation << " rad away from q_pd, above "
-               << config.safety.max_initial_deviation_rad << " rad. Move the arms closer first";
-    robot->Disable();
-    return 1;
-  }
-  if (args.stop_after == "connect") {
-    LOG(INFO) << "Stopping after the connection checks";
-    robot->Disable();
-    return 0;
+  Joints q_start = config.model.startup.QPd();
+  if (!args.solve) {
+    if (config.model.torso_dof() > 0) {
+      LOG(ERROR) << config.model.name << " has a torso, its replay is not supported by this loop";
+      return 1;
+    }
+    if (args.dry_run) {
+      robot = std::make_unique<arm::FakeArm>(config.model.startup.left_q_pd, config.model.startup.right_q_pd,
+                                             config.dry_run_time_constant_s);
+    } else {
+      robot = std::make_unique<arm::MarvinArm>(config.robot);
+    }
+    if (!robot->Connect() || !robot->CheckRobotIni((out / "robot.ini").string())) {
+      LOG(ERROR) << robot->last_error();
+      robot->Disable();
+      return 1;
+    }
+    arm::Feedback feedback;
+    if (!robot->Read(feedback)) {
+      LOG(ERROR) << robot->last_error();
+      robot->Disable();
+      return 1;
+    }
+    q_start = Join(feedback.left.q, feedback.right.q);
+    const double deviation = (q_start - config.model.startup.QPd()).cwiseAbs().maxCoeff();
+    LOG(INFO) << "Measured joints " << q_start.transpose() << ", largest deviation from q_pd " << deviation << " rad";
+    if (deviation > config.safety.max_initial_deviation_rad) {
+      LOG(ERROR) << "Joints are " << deviation << " rad away from q_pd, above "
+                 << config.safety.max_initial_deviation_rad << " rad. Move the arms closer first";
+      robot->Disable();
+      return 1;
+    }
+    if (args.stop_after == "connect") {
+      LOG(INFO) << "Stopping after the connection checks";
+      robot->Disable();
+      return 0;
+    }
   }
 
   const std::string rt_issues = SetupRealtime(config.rt_cpu, config.rt_priority);
   if (!rt_issues.empty()) {
     LOG(WARNING) << "Real-time setup incomplete, loop jitter is likely: " << rt_issues;
   }
-  controller.Start();
-  Replayer replayer(config, traj, args, controller, *robot, horizon_s, lower, upper);
-  replayer.WarmUp(q_meas, config.model.mpc_warm_up_s);
-  if (!robot->EnterJointImpedance()) {
+  controller->Start();
+  Replayer replayer(config, traj, args, *controller, robot.get(), horizon_s, lower, upper);
+  replayer.WarmUp(q_start, config.model.mpc_warm_up_s);
+  if (robot != nullptr && !robot->EnterJointImpedance()) {
     LOG(ERROR) << robot->last_error();
-    controller.Stop();
+    controller->Stop();
     robot->Disable();
     return 1;
   }
@@ -666,8 +718,10 @@ int Main(const Args& args) {
               << result.overruns << ", max lateness " << result.max_lateness_s * 1e3 << " ms, max command delay "
               << result.max_command_delay_s * 1e3 << " ms";
   }
-  controller.Stop();
-  robot->Disable();
+  controller->Stop();
+  if (robot != nullptr) {
+    robot->Disable();
+  }
 
   LOG(INFO) << "Records in " << out;
   return ok ? 0 : 2;

@@ -18,14 +18,6 @@ void WriteValues(std::FILE* file, const Vector& values) {
   }
 }
 
-void WriteJointHeader(std::FILE* file, const std::string& prefix) {
-  for (const char* arm : kArms) {
-    for (int j = 1; j <= arm::kArmDoF; ++j) {
-      std::fprintf(file, ",%s_%s_%d", arm, prefix.c_str(), j);
-    }
-  }
-}
-
 std::FILE* Open(const std::filesystem::path& path) {
   std::FILE* file = std::fopen(path.c_str(), "w");
   if (file == nullptr) {
@@ -36,7 +28,25 @@ std::FILE* Open(const std::filesystem::path& path) {
 
 }  // namespace
 
-Recorder::Recorder(double max_duration_s) {
+void Recorder::WriteJointHeader(std::FILE* file, const std::string& prefix, bool torso) const {
+  for (int j = 1; torso && j <= torso_dof_; ++j) {
+    std::fprintf(file, ",t_%s_%d", prefix.c_str(), j);
+  }
+  for (const char* arm : kArms) {
+    for (int j = 1; j <= arm::kArmDoF; ++j) {
+      std::fprintf(file, ",%s_%s_%d", arm, prefix.c_str(), j);
+    }
+  }
+}
+
+void Recorder::WriteJoints(std::FILE* file, const Joints& q) const {
+  const int n = torso_dof_ + 2 * arm::kArmDoF;
+  for (int i = 0; i < n; ++i) {
+    std::fprintf(file, ",%.9g", i < q.size() ? q[i] : 0.0);
+  }
+}
+
+Recorder::Recorder(double max_duration_s, int torso_dof) : torso_dof_(torso_dof) {
   // Margin for the scheduling jitter of the loop.
   const size_t ticks = static_cast<size_t>(std::ceil(max_duration_s * 1000.0 * 1.2)) + 1000;
   cmd_.reserve(ticks);
@@ -77,8 +87,8 @@ void Recorder::Write(const std::string& dir) const {
                  r.held ? 1 : 0, std::isfinite(r.policy_age) ? r.policy_age : -1.0, r.clamp_count);
     WriteValues(file, r.left_target);
     WriteValues(file, r.right_target);
-    WriteValues(file, r.q_cmd);
-    WriteValues(file, r.nominal_qd);
+    WriteJoints(file, r.q_cmd);
+    WriteJoints(file, r.nominal_qd);
     std::fprintf(file, "\n");
   }
   std::fclose(file);
@@ -89,7 +99,7 @@ void Recorder::Write(const std::string& dir) const {
   std::fprintf(file, "\n");
   for (const SendRecord& r : send_) {
     std::fprintf(file, "%.6f,%s", r.t, PhaseName(r.phase));
-    WriteValues(file, r.q);
+    WriteJoints(file, r.q);
     std::fprintf(file, "\n");
   }
   std::fclose(file);
@@ -97,7 +107,7 @@ void Recorder::Write(const std::string& dir) const {
   file = Open(out / "raw_fb.csv");
   std::fprintf(file, "t_s,serial");
   for (const char* field : {"q", "dq", "q_ext", "q_cmd_echo", "q_cmd_rx", "current", "tau", "temp", "est_force"}) {
-    WriteJointHeader(file, field);
+    WriteJointHeader(file, field, /*torso=*/false);
   }
   std::fprintf(file,
                ",l_state,l_error,l_frame_miss,l_in_serial,l_syscyc_miss,r_state,r_error,r_frame_miss,r_in_serial,"

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -20,19 +21,19 @@ struct CmdRecord {
   // TCP target fed to the controller: x, y, z, qx, qy, qz, qw per arm.
   Eigen::Matrix<double, 7, 1> left_target = Eigen::Matrix<double, 7, 1>::Zero();
   Eigen::Matrix<double, 7, 1> right_target = Eigen::Matrix<double, 7, 1>::Zero();
-  DualJoints q_cmd = DualJoints::Zero();
+  Joints q_cmd;
   bool evaluated = false;
   bool held = false;
   double policy_age = 0.0;
   int clamp_count = 0;
-  DualJoints nominal_qd = DualJoints::Zero();
+  Joints nominal_qd;
 };
 
 // One command sent to the robot.
 struct SendRecord {
   double t = 0.0;
   Phase phase = Phase::kS0JointMove;
-  DualJoints q = DualJoints::Zero();
+  Joints q;
 };
 
 // One new feedback frame of the robot.
@@ -45,7 +46,8 @@ struct FeedbackRecord {
 // as CSV once the run is over.
 class Recorder {
  public:
-  explicit Recorder(double max_duration_s);
+  // `torso_dof` torso joints lead the joint vectors, written as t_<field>_<i> columns before the arms.
+  Recorder(double max_duration_s, int torso_dof);
 
   void Add(const CmdRecord& record);
   void Add(const SendRecord& record);
@@ -58,9 +60,15 @@ class Recorder {
   void Write(const std::string& dir) const;
 
  private:
+  // Without `torso` the columns of the two arms only, as in the arm feedback.
+  void WriteJointHeader(std::FILE* file, const std::string& prefix, bool torso = true) const;
+  // A joint vector left empty (no evaluation on the tick) is written as zeros.
+  void WriteJoints(std::FILE* file, const Joints& q) const;
+
   template <typename T>
   void Push(std::vector<T>& records, const T& record);
 
+  int torso_dof_;
   std::vector<CmdRecord> cmd_;
   std::vector<SendRecord> send_;
   std::vector<FeedbackRecord> feedback_;

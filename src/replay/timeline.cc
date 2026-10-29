@@ -44,12 +44,10 @@ double MinJerk(double u) {
   return u * u * u * (10.0 - 15.0 * u + 6.0 * u * u);
 }
 
-Timeline::Timeline(const StartupConfig& config, const CaseTrajectory& traj, const arm::JointVector& left_q0,
-                   const arm::JointVector& right_q0, const Eigen::Isometry3d& left_fk_pd,
-                   const Eigen::Isometry3d& right_fk_pd)
-    : left_q0_(left_q0), right_q0_(right_q0), left_q_pd_(config.left_q_pd), right_q_pd_(config.right_q_pd) {
-  const double max_dq = std::max((left_q_pd_ - left_q0_).cwiseAbs().maxCoeff(),
-                                 (right_q_pd_ - right_q0_).cwiseAbs().maxCoeff());
+Timeline::Timeline(const StartupConfig& config, const CaseTrajectory& traj, const Joints& q0,
+                   const Eigen::Isometry3d& left_fk_pd, const Eigen::Isometry3d& right_fk_pd)
+    : q0_(q0), q_pd_(config.QPd()) {
+  const double max_dq = (q_pd_ - q0_).cwiseAbs().maxCoeff();
   s1_start_ = std::max(max_dq / config.joint_speed_rad_s, config.joint_min_duration_s);
 
   const double distance = std::max((traj.left_start.translation() - left_fk_pd.translation()).norm(),
@@ -95,12 +93,11 @@ Phase Timeline::PhaseAt(double t) const {
   return Phase::kDone;
 }
 
-void Timeline::JointCommand(double t, arm::JointVector& left_q, arm::JointVector& right_q) const {
+Joints Timeline::JointCommand(double t) const {
   // The quintic with zero boundary velocity and acceleration is the minimum jerk profile.
   // Without an S0 (the solve starts at q_pd) the command is q_pd.
   const double s = s1_start_ > 0.0 ? MinJerk(t / s1_start_) : 1.0;
-  left_q = left_q0_ + s * (left_q_pd_ - left_q0_);
-  right_q = right_q0_ + s * (right_q_pd_ - right_q0_);
+  return q0_ + s * (q_pd_ - q0_);
 }
 
 int Timeline::LatestWaypoint(double t) const {

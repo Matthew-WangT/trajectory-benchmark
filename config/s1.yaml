@@ -1,0 +1,58 @@
+# Replay of the benchmark cases on the Astribot S1 through its SDK: scripts/s1_bridge.py (in the docker/s1_bridge
+# image) drives the robot, this replay sends it one command per SDK period over UDP. See docs/replay.md.
+robot_dir: ../robots/s1
+
+bridge:
+  # UDP port of the replay on 127.0.0.1; the sidecar sends its feedback there and waits for the answer.
+  port: 47011
+  # SDK period: Astribot(freq) and the command rate. The SDK differentiates consecutive position commands with this
+  # period for its velocity feedforward, so the commands are sampled exactly 1 / freq_hz apart.
+  freq_hz: 250.0
+  # The sidecar repeats the previous command when the answer is not back within this long, and stops commanding
+  # after max_consecutive_miss repeats in a row.
+  reply_timeout_s: 0.002
+  max_consecutive_miss: 10
+  # How long the replay waits for the first feedback of the sidecar.
+  connect_timeout_s: 60.0
+
+# free: S1..S4 send only both arms (set_cartesian_pose, use_wbc, add_default_torso off), the SDK whole-body control
+# moves the torso as a redundancy. hold: the torso pose at the start of S1 is sent along each period.
+torso_command: free
+
+# The SDK frames as seen from the URDF: astribot_torso_base sits 0.097 m above the chassis frame
+# (astribot_torso.yaml weld_to_base_pose), and set_cartesian_pose / get_current_cartesian_pose take the arm end
+# effectors 0.15 m off the flange. The connect stage checks both against the measured joints.
+sdk_frame:
+  torso_base_in_chassis: [0.0, 0.0, 0.097]
+  ee_frames:
+    left: astribot_arm_left_end_effector
+    right: astribot_arm_right_end_effector
+
+# Checks of every SDK period, any violation stops commanding (the robot holds its last desired position; no
+# stop_robot, no move home). Each can be disabled, a disabled check is written into run_info.json and the report.
+safety:
+  joint_limit:
+    enable: true
+    # Measured and desired joints within the URDF limits shrunk by this.
+    margin_rad: 0.02
+  joint_velocity:
+    enable: true
+    # Measured joint velocity, and the step of the desired joints per SDK period, below this ratio of the URDF limit.
+    ratio: 0.8
+  tcp_error:
+    enable: true
+    # FK of the measured joints within this of the TCP target, S1..S3.
+    max_m: 0.08
+  arm_distance:
+    enable: true
+    min_m: 0.2
+  link:
+    enable: true
+    # A feedback frame at least this often; the sidecar misses are bounded by bridge.max_consecutive_miss.
+    feedback_timeout_s: 0.05
+  # Refuse to start when the measured joints are further than this from q_pd.
+  max_initial_deviation_rad: 2.0
+  # Refuse to start when the two TCPs of the reference trajectory come closer than this.
+  min_tcp_distance_m: 0.15
+  # Connect stage: largest distance between the SDK end-effector positions and FK of the measured joints.
+  max_frame_mismatch_m: 0.005

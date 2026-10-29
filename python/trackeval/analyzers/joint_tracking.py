@@ -236,7 +236,7 @@ class JointTrackingAnalyzer(Analyzer):
             rep.metric(f"joint.delay_fd_ms.{names[i]}", tau_f[i] * 1e3)
             rep.metric(f"joint.delay_phasefit_ms.{names[i]}", tau_f[i] * 1e3)
             rep.metric(f"joint.delay_disagree_ms.{names[i]}", disagreement)
-        for arm in ctx.profile.arms:
+        for arm in ctx.profile.groups:
             tx = tau_x[ctx.profile.joint_index(arm)] * 1e3
             tag = "不一致" if delay_inconsistent(tx) else "一致"
             arm_windows = [tau_windows[i] for i in ctx.profile.joint_index(arm) if tau_windows[i].size]
@@ -257,7 +257,7 @@ class JointTrackingAnalyzer(Analyzer):
             peak = np.median(arm_peaks) if arm_peaks else float("nan")
             prominence = np.median(arm_prominences) if arm_prominences else float("nan")
             rep.add(
-                f"{arm.name:5s} arm tau_xcorr: P50/P95 {arm_p50:.1f}/{arm_p95:.1f} ms "
+                f"{arm.name:5s} tau_xcorr: P50/P95 {arm_p50:.1f}/{arm_p95:.1f} ms "
                 f"(jitter {delay_jitter:.1f} ms, valid {valid_count}/{total_count}, "
                 f"peak/prom {peak:.2f}/{prominence:.2f}), "
                 f"关节 P95 极差 {p95_range:.1f} ms -> {tag}"
@@ -296,12 +296,12 @@ class JointTrackingAnalyzer(Analyzer):
                 )
                 rep.add(f"  {name:13s} {note}")
             rep.metric(f"joint.err_vel_corr.{name}", r[i])
-        for arm in ctx.profile.arms:
+        for arm in ctx.profile.groups:
             values = slope[ctx.profile.joint_index(arm)]
             values = values[np.isfinite(values)]
             if values.size:
                 rep.add(
-                    f"{arm.name:5s} arm 等效延迟: median {np.median(values):.1f} ms, "
+                    f"{arm.name:5s} 等效延迟: median {np.median(values):.1f} ms, "
                     f"P95 {np.percentile(values, 95):.1f} ms"
                 )
                 rep.metric(f"joint.{arm.name}.equiv_delay_median_ms", np.median(values))
@@ -358,7 +358,7 @@ class JointTrackingAnalyzer(Analyzer):
 
 def fig_delay(ctx: Context, delay: DelayResult) -> None:
     plt = ctx.plt()
-    arms, names = ctx.profile.arms, ctx.joint_names
+    arms, names = ctx.profile.groups, ctx.joint_names
     fig, axes = plt.subplots(len(arms), 3, figsize=(17, 4.6 * len(arms)), squeeze=False)
     for r, arm in enumerate(arms):
         joints = ctx.profile.joint_index(arm)

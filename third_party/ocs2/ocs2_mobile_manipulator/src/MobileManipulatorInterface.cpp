@@ -103,6 +103,15 @@ MobileManipulatorInterface::MobileManipulatorInterface(const std::string& taskFi
   std::string baseFrame, eeFrame;
   loadData::loadPtreeValue<std::string>(pt, baseFrame, "model_information.baseFrame", false);
   loadData::loadPtreeValue<std::string>(pt, eeFrame, "model_information.eeFrame", false);
+  // Several end effectors tracked by one problem: model_information.eeFrames, the target state holds
+  // [position, quaternion] of each in this order. Without it the single eeFrame.
+  std::vector<std::string> eeFrames;
+  loadData::loadStdVector<std::string>(taskFile, "model_information.eeFrames", eeFrames, false);
+  if (eeFrames.empty()) {
+    eeFrames.push_back(eeFrame);
+  } else {
+    eeFrame = eeFrames.front();
+  }
 
   std::cerr << "\n #### Model Information:";
   std::cerr << "\n #### =============================================================================\n";
@@ -121,6 +130,7 @@ MobileManipulatorInterface::MobileManipulatorInterface(const std::string& taskFi
 
   // ManipulatorModelInfo
   manipulatorModelInfo_ = mobile_manipulator::createManipulatorModelInfo(*pinocchioInterfacePtr_, modelType, baseFrame, eeFrame);
+  manipulatorModelInfo_.eeFrames = eeFrames;
 
   bool usePreComputation = true;
   bool recompileLibraries = true;
@@ -166,10 +176,16 @@ MobileManipulatorInterface::MobileManipulatorInterface(const std::string& taskFi
   // joint limits constraint
   problem_.softConstraintPtr->add("jointLimits", getJointLimitSoftConstraint(*pinocchioInterfacePtr_, taskFile));
   // end-effector state constraint
-  problem_.stateSoftConstraintPtr->add("endEffector", getEndEffectorConstraint(*pinocchioInterfacePtr_, taskFile, "endEffector",
-                                                                               usePreComputation, libraryFolder, recompileLibraries));
-  problem_.finalSoftConstraintPtr->add("finalEndEffector", getEndEffectorConstraint(*pinocchioInterfacePtr_, taskFile, "finalEndEffector",
-                                                                                    usePreComputation, libraryFolder, recompileLibraries));
+  // end-effector state constraint, one per end effector; the first keeps the single end-effector names
+  for (size_t i = 0; i < manipulatorModelInfo_.eeFrames.size(); ++i) {
+    const std::string suffix = i == 0 ? "" : "_" + std::to_string(i);
+    problem_.stateSoftConstraintPtr->add("endEffector" + suffix,
+                                         getEndEffectorConstraint(*pinocchioInterfacePtr_, taskFile, "endEffector", usePreComputation,
+                                                                  libraryFolder, recompileLibraries, i));
+    problem_.finalSoftConstraintPtr->add("finalEndEffector" + suffix,
+                                         getEndEffectorConstraint(*pinocchioInterfacePtr_, taskFile, "finalEndEffector",
+                                                                  usePreComputation, libraryFolder, recompileLibraries, i));
+  }
   // self-collision avoidance constraint
   bool activateSelfCollision = true;
   loadData::loadPtreeValue(pt, activateSelfCollision, "selfCollision.activate", true);
@@ -254,7 +270,7 @@ std::unique_ptr<StateInputCost> MobileManipulatorInterface::getQuadraticInputCos
 std::unique_ptr<StateCost> MobileManipulatorInterface::getEndEffectorConstraint(const PinocchioInterface& pinocchioInterface,
                                                                                 const std::string& taskFile, const std::string& prefix,
                                                                                 bool usePreComputation, const std::string& libraryFolder,
-                                                                                bool recompileLibraries) {
+                                                                                bool recompileLibraries, size_t eeIndex) {
   scalar_t muPosition = 1.0;
   scalar_t muOrientation = 1.0;
   const std::string name = "WRIST_2";
@@ -274,14 +290,15 @@ std::unique_ptr<StateCost> MobileManipulatorInterface::getEndEffectorConstraint(
   std::unique_ptr<StateConstraint> constraint;
   if (usePreComputation) {
     MobileManipulatorPinocchioMapping pinocchioMapping(manipulatorModelInfo_);
-    PinocchioEndEffectorKinematics eeKinematics(pinocchioInterface, pinocchioMapping, {manipulatorModelInfo_.eeFrame});
-    constraint.reset(new EndEffectorConstraint(eeKinematics, *referenceManagerPtr_));
+    PinocchioEndEffectorKinematics eeKinematics(pinocchioInterface, pinocchioMapping, {manipulatorModelInfo_.eeFrames[eeIndex]});
+    constraint.reset(new EndEffectorConstraint(eeKinematics, *referenceManagerPtr_, 7 * eeIndex));
   } else {
     MobileManipulatorPinocchioMappingCppAd pinocchioMappingCppAd(manipulatorModelInfo_);
-    PinocchioEndEffectorKinematicsCppAd eeKinematics(pinocchioInterface, pinocchioMappingCppAd, {manipulatorModelInfo_.eeFrame},
-                                                     manipulatorModelInfo_.stateDim, manipulatorModelInfo_.inputDim,
-                                                     "end_effector_kinematics", libraryFolder, recompileLibraries, false);
-    constraint.reset(new EndEffectorConstraint(eeKinematics, *referenceManagerPtr_));
+    const std::string libraryName = eeIndex == 0 ? "end_effector_kinematics" : "end_effector_kinematics_" + std::to_string(eeIndex);
+    PinocchioEndEffectorKinematicsCppAd eeKinematics(pinocchioInterface, pinocchioMappingCppAd, {manipulatorModelInfo_.eeFrames[eeIndex]},
+                                                     manipulatorModelInfo_.stateDim, manipulatorModelInfo_.inputDim, libraryName,
+                                                     libraryFolder, recompileLibraries, false);
+    constraint.reset(new EndEffectorConstraint(eeKinematics, *referenceManagerPtr_, 7 * eeIndex));
   }
 
   std::vector<std::unique_ptr<PenaltyBase>> penaltyArray(6);

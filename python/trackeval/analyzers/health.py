@@ -28,6 +28,9 @@ class HealthAnalyzer(Analyzer):
     def applicable(self, ctx):
         if ctx.raw_dir is None or not (ctx.raw_dir / "raw_cmd.csv").is_file():
             return "no raw records of the replay (only the Marvin replay writes them)"
+        info = json.loads((ctx.raw_dir / "run_info.json").read_text())
+        if info.get("backend") == "s1_sdk":
+            return "S1 SDK bridge run, its link health (misses, SDK read time) is in run_info.json under bridge"
         return None
 
     def run(self, ctx: Context) -> AnalyzerResult:

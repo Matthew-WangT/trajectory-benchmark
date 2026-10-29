@@ -88,9 +88,17 @@ void Ocs2IkController::Reset(const Eigen::VectorXd& q, double time) {
 
 void Ocs2IkController::SetTargetTrajectory(const std::vector<double>& times,
                                            const std::vector<Eigen::Isometry3d>& poses_X_ParentEnd) {
+  SetTargetTrajectory(times, std::vector<std::vector<Eigen::Isometry3d>>{poses_X_ParentEnd});
+}
+
+void Ocs2IkController::SetTargetTrajectory(const std::vector<double>& times,
+                                           const std::vector<std::vector<Eigen::Isometry3d>>& ee_poses_X_ParentEnd) {
   CHECK(reset_done_) << name_ << " Reset() must be called before SetTargetTrajectory()";
   CHECK(!times.empty()) << name_ << " target trajectory is empty";
-  CHECK_EQ(times.size(), poses_X_ParentEnd.size()) << name_ << " times and poses size mismatch";
+  CHECK_EQ(static_cast<int>(ee_poses_X_ParentEnd.size()), ee_count()) << name_ << " one pose sequence per end effector";
+  for (const auto& poses : ee_poses_X_ParentEnd) {
+    CHECK_EQ(times.size(), poses.size()) << name_ << " times and poses size mismatch";
+  }
   CHECK_GT(times.back(), last_eval_time_.load(std::memory_order_relaxed))
       << name_ << " target trajectory lies entirely in the past";
 
@@ -104,10 +112,14 @@ void Ocs2IkController::SetTargetTrajectory(const std::vector<double>& times,
     if (i > 0) {
       CHECK_GT(times[i], times[i - 1]) << name_ << " target times must be strictly increasing";
     }
-    ocs2::vector_t goal_state(kGoalStateDim);
-    goal_state.segment<3>(0) = poses_X_ParentEnd[i].translation().cast<ocs2::scalar_t>();
-    const auto rq = Eigen::Quaterniond(poses_X_ParentEnd[i].linear());
-    goal_state.segment<4>(3) = Eigen::Quaternion<ocs2::scalar_t>(rq.w(), rq.x(), rq.y(), rq.z()).coeffs();
+    ocs2::vector_t goal_state(kGoalStateDim * ee_count());
+    for (int ee = 0; ee < ee_count(); ++ee) {
+      const Eigen::Isometry3d& pose = ee_poses_X_ParentEnd[ee][i];
+      goal_state.segment<3>(kGoalStateDim * ee) = pose.translation().cast<ocs2::scalar_t>();
+      const auto rq = Eigen::Quaterniond(pose.linear());
+      goal_state.segment<4>(kGoalStateDim * ee + 3) =
+          Eigen::Quaternion<ocs2::scalar_t>(rq.w(), rq.x(), rq.y(), rq.z()).coeffs();
+    }
     time_trajectory.push_back(times[i]);
     state_trajectory.push_back(std::move(goal_state));
     input_trajectory.push_back(ocs2::vector_t::Zero(model_info_.inputDim));
@@ -231,28 +243,31 @@ void Ocs2IkController::MpcLoop() {
 }
 
 void Ocs2IkController::CalculatePoseError(const Eigen::Isometry3d& target_X_ParentEnd, const Eigen::VectorXd& q,
-                                          Eigen::VectorXd& error) {
+                                          Eigen::VectorXd& error, int ee) {
   const Eigen::Matrix<ocs2::scalar_t, 3, 1> goal_pos = target_X_ParentEnd.translation().cast<ocs2::scalar_t>();
   const auto rq = Eigen::Quaterniond(target_X_ParentEnd.linear());
   const Eigen::Quaternion<ocs2::scalar_t> goal_ori(rq.w(), rq.x(), rq.y(), rq.z());
 
-  const Eigen::Matrix<ocs2::scalar_t, 3, 1> pos_err = ee_kinematics_->getPosition(q).front() - goal_pos;
-  const Eigen::Matrix<ocs2::scalar_t, 3, 1> ori_err = ee_kinematics_->getOrientationError(q, {goal_ori}).front();
+  std::vector<Eigen::Quaternion<ocs2::scalar_t>> refs(ee_count(), goal_ori);
+  const Eigen::Matrix<ocs2::scalar_t, 3, 1> pos_err = ee_kinematics_->getPosition(q)[ee] - goal_pos;
+  const Eigen::Matrix<ocs2::scalar_t, 3, 1> ori_err = ee_kinematics_->getOrientationError(q, refs)[ee];
 
   error.resize(kPoseErrorDim);
   error.head<3>() = pos_err;
   error.tail<3>() = ori_err;
 }
 
-Eigen::Isometry3d Ocs2IkController::EePose(const Eigen::VectorXd& arm_q) const {
-  const Eigen::Vector3d position = ee_kinematics_->getPosition(arm_q).front();
+Eigen::Isometry3d Ocs2IkController::EePose(const Eigen::VectorXd& q, int ee) const {
+  const Eigen::Vector3d position = ee_kinematics_->getPosition(q)[ee];
+  std::vector<Eigen::Quaterniond> refs(ee_count(), Eigen::Quaterniond::Identity());
   // getOrientationError(q, {qRef}) == ocs2::quaternionDistance(q_fk, qRef). With qRef = identity it
   // reduces to -q_fk.vec() (see RotationTransforms.h), so the FK quaternion's vector part is exactly
   // the negated error.
-  const Eigen::Vector3d vec = -ee_kinematics_->getOrientationError(arm_q, {Eigen::Quaterniond::Identity()}).front();
+  const Eigen::Vector3d vec = -ee_kinematics_->getOrientationError(q, refs)[ee];
   const double w_mag = std::sqrt(std::max(0.0, 1.0 - vec.squaredNorm()));
   Eigen::Quaterniond orientation(w_mag, vec.x(), vec.y(), vec.z());
-  const double residual = ee_kinematics_->getOrientationError(arm_q, {orientation}).front().norm();
+  refs[ee] = orientation;
+  const double residual = ee_kinematics_->getOrientationError(q, refs)[ee].norm();
   if (residual > 1e-6) {
     orientation.w() = -w_mag;
   }

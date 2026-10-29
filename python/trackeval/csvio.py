@@ -13,6 +13,8 @@ from . import TrackEvalError
 
 POSE_FIELDS = ("x", "y", "z", "qx", "qy", "qz", "qw")
 ARM_PREFIXES = {"left": "l", "right": "r"}
+# Joint columns of a robot with a torso shared by both arms, before the arms: t_q_cmd_*, t_q_meas_*, ...
+TORSO_PREFIX = "t"
 
 
 def read_csv(path: Path) -> tuple[list[str], np.ndarray, dict[str, list[str]]]:
@@ -82,11 +84,13 @@ def load_delivery(path: Path, t_start: float = 0.0, t_end: float | None = None) 
         cmd_pose[arm] = _columns(header, values, [f"{p}_cmd_{f}" for f in POSE_FIELDS])
         meas_pose[arm] = _columns(header, values, [f"{p}_meas_{f}" for f in POSE_FIELDS])
         n_joints[arm] = _joint_count(header, f"{p}_q_meas")
+    n_joints["torso"] = _joint_count(header, f"{TORSO_PREFIX}_q_meas")
+    prefixes = {"torso": TORSO_PREFIX, **ARM_PREFIXES} if n_joints["torso"] else ARM_PREFIXES
 
     def joints(stem: str) -> np.ndarray | None:
-        if any(_joint_count(header, f"{p}_{stem}") == 0 for p in ARM_PREFIXES.values()):
+        if any(_joint_count(header, f"{p}_{stem}") == 0 for p in prefixes.values()):
             return None
-        cols = [f"{p}_{stem}_{i}" for arm, p in ARM_PREFIXES.items() for i in range(1, n_joints[arm] + 1)]
+        cols = [f"{p}_{stem}_{i}" for group, p in prefixes.items() for i in range(1, n_joints[group] + 1)]
         return _columns(header, values, cols)
 
     tau, kind = joints("tau_meas"), "tau"

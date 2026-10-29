@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds the image when missing and runs a command (default: an interactive shell) inside it with the repository
 # mounted at /workspace. Host networking reaches the controller, SYS_NICE and rtprio allow the SCHED_FIFO loop. The
-# host passwd / group files give the host uid its user name in the container.
+# host passwd / group files give the host uid its user name in the container, the host time zone its local time.
 #   docker/run.sh                       # shell
 #   docker/run.sh docker/build.sh       # build the C++ code into build/
 set -euo pipefail
@@ -27,6 +27,8 @@ exec docker run --rm "${TTY_FLAGS[@]}" \
   --user "$(id -u):$(id -g)" \
   -v /etc/passwd:/etc/passwd:ro \
   -v /etc/group:/etc/group:ro \
+  -v /etc/localtime:/etc/localtime:ro \
+  -v /etc/timezone:/etc/timezone:ro \
   -e HOME=/tmp \
   -v "$REPO_ROOT:/workspace" \
   -w /workspace \

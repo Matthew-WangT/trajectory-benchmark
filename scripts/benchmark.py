@@ -54,8 +54,8 @@ STAGES = {
     "S2": "只跑 S0–S2：慢速移到起始位姿并静止，不跑轨迹",
 }
 # Replay log lines worth showing on the terminal.
-KEY_LINES = re.compile(r"Case |Connected|robot\.ini|Measured joints|Entered the joint|Run run_|Run \d|Abort|peaks|"
-                       r"Records in|Error|error|failed|Refusing|Missing")
+KEY_LINES = re.compile(r"Case |Connected|robot\.ini|Measured joints|Entered the joint|Run run_|Run \d|Run:|Abort|peaks|"
+                       r"Records in|Error|error|failed|Refusing|Missing|Sidecar|Waiting up to|disabled")
 
 BOLD, CYAN, GREEN, RED, YELLOW, RESET = "\x1b[1m", "\x1b[36m", "\x1b[32m", "\x1b[31m", "\x1b[33m", "\x1b[0m"
 
@@ -123,6 +123,11 @@ def list_robots() -> list[Path]:
     return sorted(p.parent for p in (REPO / "robots").glob("*/robot.yaml"))
 
 
+def is_s1(config: Path) -> bool:
+    """An S1 replay config: the robot is driven by the SDK sidecar scripts/s1_bridge.py."""
+    return "bridge" in read_yaml(config)
+
+
 def robot_of(config: Path) -> Path:
     """Robot folder named by a replay config."""
     return (config.parent / read_yaml(config)["robot_dir"]).resolve()
@@ -135,6 +140,13 @@ def case_label(case: Path) -> str:
 
 def config_summary(path: Path) -> list[str]:
     """Key settings of the replay config, as the replay parses them."""
+    if is_s1(path):
+        cfg = read_yaml(path)
+        disabled = [k for k, v in cfg.get("safety", {}).items() if isinstance(v, dict) and not v.get("enable", True)]
+        return [f"S1 SDK sidecar         127.0.0.1:{cfg['bridge']['port']}, {cfg['bridge']['freq_hz']:.0f} Hz, "
+                f"S0 set_joints_position / S1.. set_cartesian_pose (direct, use_wbc)",
+                f"腰                     {cfg.get('torso_command', 'free')}",
+                f"安全检查               {'全部启用' if not disabled else '禁用 ' + ', '.join(disabled)}"]
     out = subprocess.run([str(REPLAY), "--config", str(path), "--show-config"], cwd=REPO, capture_output=True,
                          text=True)
     if out.returncode != 0:
@@ -205,14 +217,36 @@ def resolve(args: argparse.Namespace) -> Plan:
 def replay_command(plan: Plan, out: Path, solve_result: Path | None = None) -> list[str]:
     cmd = [str(REPLAY), "--config", str(plan.config), "--case", str(plan.case), "--out", str(out),
            "--runs", str(plan.runs)]
-    if plan.dry:
+    if plan.dry and not is_s1(plan.config):
         cmd.append("--dry-run")
+    elif plan.dry:
+        # The S1 dry run is the real replay against the fake sidecar (start_fake_bridge), the precheck of the
+        # trajectory solve is for the robot.
+        cmd.append("--skip-vel-check")
     if plan.stage != "full":
         # The bring-up stages stop before the trajectory, the precheck of the trajectory solve is about it.
-        cmd += ["--stop-after", plan.stage, "--skip-vel-check"]
+        cmd += ["--stop-after", plan.stage]
+        if "--skip-vel-check" not in cmd:
+            cmd.append("--skip-vel-check")
     elif solve_result is not None:
         cmd += ["--solve-result", str(solve_result)]
     return cmd
+
+
+def start_fake_bridge(config: Path, log: Path) -> subprocess.Popen:
+    """The S1 sidecar with its kinematic stand-in of the robot, in this container, for the S1 dry run."""
+    log.parent.mkdir(parents=True, exist_ok=True)
+    info(f"dry-run: 启动 S1 sidecar 的仿真机器人 (scripts/s1_bridge.py --fake)，日志 {os.path.relpath(log, REPO)}")
+    return subprocess.Popen([sys.executable, "scripts/s1_bridge.py", "--config", str(config), "--fake"], cwd=REPO,
+                            stdout=open(log, "w"), stderr=subprocess.STDOUT)
+
+
+def request_sdk_bridge(config: Path) -> None:
+    """Asks ./benchmark.sh on the host to start the SDK sidecar in its image (the container cannot run docker)."""
+    (REPO / "runs").mkdir(exist_ok=True)
+    (REPO / "runs/.s1_bridge_request").write_text(os.path.relpath(config, REPO))
+    info("S1 真机: 请宿主上的 ./benchmark.sh 启动 SDK sidecar（日志 runs/s1_bridge.log）；没有经 ./benchmark.sh 启动"
+         "时，在另一个终端运行 docker/s1_bridge/run.sh")
 
 
 def solve_session(case: Path, robot: Path) -> Path:
@@ -325,14 +359,30 @@ def print_table(runs: list[Path]) -> None:
     def cell(key: str) -> str:
         values = [m[key] for m in metrics if m.get(key) is not None]
         if not values:
-            return "-"
+            return f"{'-':>7s}"
         mean = sum(values) / len(values)
         return f"{mean:7.2f}" if len(values) == 1 else f"{mean:7.2f} [{min(values):.2f}, {max(values):.2f}]"
 
     print(f"\n{BOLD}结果 ({len(runs)} 次{'，均值 [min, max]' if len(runs) > 1 else ''}){RESET}")
-    print("  " + pad("", 30) + pad("左臂", 28) + "右臂")
+    # A robot with a torso gets a torso column, joint numbers only.
+    groups = [("torso", "腰")] if any("joint_error.torso.rms_deg_mean" in m for m in metrics) else []
+    groups += [("left", "左臂"), ("right", "右臂")]
+    print("  " + pad("", 30) + "".join(pad(label, 28) for _, label in groups))
     for title, key in TABLE:
-        print("  " + pad(title, 30) + pad(cell(key.format(arm="left")), 28) + cell(key.format(arm="right")))
+        print("  " + pad(title, 30) + "".join(pad(cell(key.format(arm=g)), 28) for g, _ in groups))
+    infos = [json.loads((r / "run_info.json").read_text()) for r in runs]
+    if all(i.get("backend") == "s1_sdk" for i in infos):
+        # The S1 runs: the link to the SDK sidecar instead of the Marvin replay chain.
+        bridge = [i["bridge"] for i in infos]
+        print(f"  sidecar 未应答周期 {sum(b['total_miss'] for b in bridge)}   最长连续 "
+              f"{max(b['max_consecutive_miss'] for b in bridge)}   SDK 读取 p50/max [ms] "
+              f"{max(b['read_ms_p50'] for b in bridge):.2f}/{max(b['read_ms_max'] for b in bridge):.2f}   "
+              f"SDK 命令 p50/max [ms] {max(b['command_ms_p50'] for b in bridge):.2f}/"
+              f"{max(b['command_ms_max'] for b in bridge):.2f}")
+        disabled = sorted({c for i in infos for c in i.get("safety_disabled", [])})
+        if disabled:
+            warn(f"安全检查被禁用: {', '.join(disabled)}")
+        return
     health = [("IK hold 占比", "health.hold_frac"), ("下发→控制器收到 [ms]", "health.send_to_cmd_rx_lag_ms"),
               ("下发→实测 [ms]", "health.send_to_meas_lag_ms"), ("控制循环超时次数", "health.loop_overruns")]
     print("  " + "   ".join(f"{t} {cell(k).strip()}" for t, k in health))
@@ -360,23 +410,27 @@ def print_solve_table(metrics_path: Path) -> None:
 
     def cell(key: str) -> str:
         value = m.get(key)
-        return "-" if value is None else f"{value:8.2f}"
+        return f"{'-':>8s}" if value is None else f"{value:8.2f}"
 
     runs = f"，{result['runs']} 次取最差" if result["runs"] > 1 else ""
     print(f"\n{BOLD}求解结果 ({result['case']} on {result['robot']}, S3{runs}){RESET}")
-    print("  " + pad("", 32) + pad("左臂", 14) + "右臂")
+    # A robot with a torso gets a torso column: its joints have margins and distributions but no TCP.
+    groups = [("torso", "腰")] if "margin.torso.pos_deg_min" in m else []
+    groups += [("left", "左臂"), ("right", "右臂")]
+    print("  " + pad("", 32) + "".join(pad(label, 14) for _, label in groups))
     for title, key in SOLVE_TABLE:
-        left, right = key.format(arm="left"), key.format(arm="right")
+        cells = [cell(key.format(arm=g)) for g, _ in groups]
         joints = ""
         if "pos_deg_min" in key:
-            joints = f"   ({m.get('margin.left.pos_joint_min')}, {m.get('margin.right.pos_joint_min')})"
-        print("  " + pad(title, 32) + pad(cell(left), 14) + cell(right) + joints)
+            joints = "   (" + ", ".join(str(m.get(f"margin.{g}.pos_joint_min")) for g, _ in groups) + ")"
+        print("  " + pad(title, 32) + "".join(pad(c, 14) for c in cells) + joints)
     counts = "  ".join(f"{k} {m.get(f'violation.{k}.count', 0):.0f}"
                        for k in ("position", "velocity", "acceleration", "command_step", "hold"))
     print(f"  违规次数 (S1..S4): {counts}")
     precheck = result["precheck"]
     verdict = f"{GREEN}通过{RESET}" if precheck["pass"] else f"{RED}不通过: {precheck['reason']}{RESET}"
-    print(f"  真机预检: 速度峰值 {precheck['max_joint_vel_deg_s']:.1f} deg/s (限 {precheck['limit_deg_s']:.0f}) -> "
+    joint = f"{precheck['joint']} " if precheck.get("joint") else ""
+    print(f"  真机预检: {joint}速度峰值 {precheck['max_joint_vel_deg_s']:.1f} deg/s (限 {precheck['limit_deg_s']:.0f}) -> "
           f"{verdict}")
 
 
@@ -438,7 +492,10 @@ def main() -> int:
             if not precheck["pass"]:
                 warn(f"真机预检不通过: {precheck['reason']}，停止")
                 return 1
-            info(f"真机预检通过: 关节速度峰值 {precheck['max_joint_vel_deg_s']:.1f} deg/s，无位置越限")
+            info(f"真机预检通过: {precheck.get('joint', '关节')} 速度峰值 {precheck['max_joint_vel_deg_s']:.1f} deg/s，"
+                 f"无位置越限")
+            if is_s1(plan.config):
+                info("注意: 预检用的是 OCS2 全身 IK 的求解，S1 真机由 SDK 的 WBC 求解，预检只说明可达与余量")
         if not args.yes:
             try:
                 input(f"{BOLD}{RED}真机即将运动，确认周围安全后按 Enter 开始，Ctrl-C 取消 ...{RESET}")
@@ -446,7 +503,20 @@ def main() -> int:
                 print("\naborted")
                 return 1
 
-    code = run_replay(replay_command(plan, session, solve_result), log)
+    bridge = None
+    if is_s1(plan.config):
+        if plan.dry:
+            bridge = start_fake_bridge(plan.config, session / "s1_bridge.log")
+        else:
+            request_sdk_bridge(plan.config)
+    try:
+        code = run_replay(replay_command(plan, session, solve_result), log)
+    finally:
+        if bridge is not None:
+            try:
+                bridge.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                bridge.terminate()
     if code != 0:
         warn(f"replay 退出码 {code}，完整日志 {os.path.relpath(log, REPO)}")
     if plan.stage != "full":

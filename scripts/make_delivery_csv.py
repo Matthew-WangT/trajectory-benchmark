@@ -5,7 +5,8 @@
 
 Rows are the IK evaluations (500 Hz) from S1 on, t_s = 0 at the first trajectory command (first S3 row). The command
 pose is the TCP target fed to the IK controller, the measured pose FK(q_meas) of the URDF, both in the robot BASE
-frame (T_yours_ours = I on the Marvin). The feedback is interpolated linearly onto the command ticks. A `phase`
+frame (T_yours_ours = I on the Marvin, robots/<name>/README.md otherwise). A robot with a torso gets t_* joint
+columns before the arms. The feedback is interpolated linearly onto the command ticks. A `phase`
 column keeps the S1..S4 split. Writes delivery.csv into the run folder.
 """
 
@@ -21,16 +22,15 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 
 from trackeval.csvio import read_csv  # noqa: E402
-from trackeval.robots import MARVIN  # noqa: E402
+from trackeval.model import ArmModel  # noqa: E402
+from trackeval.robots import PROFILES, RobotProfile  # noqa: E402
 
 POSE = ("x", "y", "z", "qx", "qy", "qz", "qw")
-ARMS = ("l", "r")
-DOF = 7
 
 
-def joint_columns(header: list[str], values: np.ndarray, stem: str, arm: str) -> np.ndarray:
+def joint_columns(header: list[str], values: np.ndarray, stem: str, group) -> np.ndarray:
     index = {h: i for i, h in enumerate(header)}
-    return values[:, [index[f"{arm}_{stem}_{j}"] for j in range(1, DOF + 1)]]
+    return values[:, [index[f"{group.prefix}_{stem}_{j}"] for j in range(1, len(group.joints) + 1)]]
 
 
 def continuous_quat(quat: np.ndarray) -> np.ndarray:
@@ -42,38 +42,26 @@ def continuous_quat(quat: np.ndarray) -> np.ndarray:
     return out
 
 
-def fk_poses(urdf: Path, q: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
-    import pinocchio as pin
-
-    model = pin.buildModelFromUrdf(str(urdf))
-    data = model.createData()
-    arms = {a.prefix: a for a in MARVIN.arms}
-    idx_q = {p: [model.joints[model.getJointId(j)].idx_q for j in arms[p].joints] for p in ARMS}
-    frames = {p: model.getFrameId(arms[p].ee_frame) for p in ARMS}
-    n = len(q["l"])
-    out = {p: np.zeros((n, 7)) for p in ARMS}
-    q_full = pin.neutral(model)
-    for k in range(n):
-        for p in ARMS:
-            q_full[idx_q[p]] = q[p][k]
-        pin.framesForwardKinematics(model, data, q_full)
-        for p in ARMS:
-            placement = data.oMf[frames[p]]
-            quat = pin.Quaternion(placement.rotation)
-            out[p][k] = [*placement.translation, quat.x, quat.y, quat.z, quat.w]
-    for p in ARMS:
-        out[p][:, 3:] = continuous_quat(out[p][:, 3:])
+def fk_poses(profile: RobotProfile, urdf: Path, q: np.ndarray) -> dict[str, np.ndarray]:
+    """TCP poses (N,7) per arm prefix for the joint vectors q (N, joint_order), the torso included."""
+    poses = ArmModel(profile, urdf).frame_poses(q, [a.ee_frame for a in profile.arms])
+    out = {}
+    for arm in profile.arms:
+        pose = poses[arm.ee_frame]
+        pose[:, 3:] = continuous_quat(pose[:, 3:])
+        out[arm.prefix] = pose
     return out
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("run_dir", type=Path)
-    parser.add_argument("--urdf", type=Path, default=MARVIN.urdf)
+    parser.add_argument("--urdf", type=Path, help="URDF of the FK, by default the one of the robot of run_info.json")
     args = parser.parse_args()
 
     run = args.run_dir
     info = json.loads((run / "run_info.json").read_text())
+    profile = PROFILES[info.get("robot", "marvin")]
     if info.get("stop_after_s0"):
         print(f"{run} only ran S0, nothing to deliver", file=sys.stderr)
         return 1
@@ -92,21 +80,25 @@ def main() -> int:
     def interp(values: np.ndarray) -> np.ndarray:
         return np.column_stack([np.interp(t_run, t_fb, values[:, j]) for j in range(values.shape[1])])
 
-    q_meas = {p: interp(joint_columns(header_f, fb, "q", p)) for p in ARMS}
-    meas_pose = fk_poses(args.urdf, q_meas)
+    q_meas = {g.prefix: interp(joint_columns(header_f, fb, "q", g)) for g in profile.groups}
+    meas_pose = fk_poses(profile, args.urdf or profile.urdf,
+                         np.column_stack([q_meas[g.prefix] for g in profile.groups]))
 
     columns = ["t_s", "phase"]
     blocks = []
-    for p in ARMS:
-        target = cmd[:, [col[f"{p}_target_{f}"] for f in POSE]].copy()
-        target[:, 3:] = continuous_quat(target[:, 3:])
-        named = [
-            ([f"{p}_cmd_{f}" for f in POSE], target),
-            ([f"{p}_meas_{f}" for f in POSE], meas_pose[p]),
-            ([f"{p}_q_cmd_{j}" for j in range(1, DOF + 1)], joint_columns(header_c, cmd, "q_cmd", p)),
-            ([f"{p}_q_meas_{j}" for j in range(1, DOF + 1)], q_meas[p]),
-            ([f"{p}_dq_meas_{j}" for j in range(1, DOF + 1)], interp(joint_columns(header_f, fb, "dq", p))),
-            ([f"{p}_tau_meas_{j}" for j in range(1, DOF + 1)], interp(joint_columns(header_f, fb, "tau", p))),
+    # The torso (if any) first: joint columns only, it has no TCP.
+    for g in profile.groups:
+        p, n = g.prefix, range(1, len(g.joints) + 1)
+        named = []
+        if g in profile.arms:
+            target = cmd[:, [col[f"{p}_target_{f}"] for f in POSE]].copy()
+            target[:, 3:] = continuous_quat(target[:, 3:])
+            named += [([f"{p}_cmd_{f}" for f in POSE], target), ([f"{p}_meas_{f}" for f in POSE], meas_pose[p])]
+        named += [
+            ([f"{p}_q_cmd_{j}" for j in n], joint_columns(header_c, cmd, "q_cmd", g)),
+            ([f"{p}_q_meas_{j}" for j in n], q_meas[p]),
+            ([f"{p}_dq_meas_{j}" for j in n], interp(joint_columns(header_f, fb, "dq", g))),
+            ([f"{p}_tau_meas_{j}" for j in n], interp(joint_columns(header_f, fb, "tau", g))),
         ]
         for names, values in named:
             columns += names

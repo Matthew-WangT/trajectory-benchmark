@@ -1,9 +1,11 @@
+#include <memory>
 #include <string>
 #include <vector>
 
 #include <gtest/gtest.h>
 
 #include "mpc/dual_arm_ocs2_ik_controller.h"
+#include "mpc/ik_controller.h"
 #include "mpc/mpc_config.h"
 #include "replay/config.h"
 
@@ -57,6 +59,53 @@ TEST(MpcSmokeTest, ConvergesToAStaticTarget) {
   EXPECT_LT(right_error.head<3>().norm(), 0.015);
   EXPECT_LT(left_error.tail<3>().norm(), 0.02);
   EXPECT_LT(right_error.tail<3>().norm(), 0.04);
+}
+
+// The whole-body controller of the S1 moves both TCPs 5 cm with one MPC over the torso and both arms. The bounds catch
+// a broken multi end-effector problem (a swapped or ignored target), not the regularization offset.
+TEST(MpcSmokeTest, WholeBodyConvergesToAStaticTarget) {
+  const std::string source_dir = BENCHMARK_SOURCE_DIR;
+  const replay::RobotModelConfig robot = replay::LoadRobotModelConfig(source_dir + "/robots/s1");
+  const Ocs2IkControllerConfig config = LoadOcs2IkControllerConfig(robot.controller_yaml);
+  ASSERT_EQ(config.type, "whole_body");
+  const std::unique_ptr<IkController> controller = MakeIkController(robot.urdf, config);
+  ASSERT_EQ(controller->dof(), 18);
+
+  Eigen::VectorXd q = robot.startup.QPd();
+  Eigen::Isometry3d left_target, right_target;
+  controller->GetEePoses(q, left_target, right_target);
+  // The TCPs at the S1 home pose, the shoulder midpoint of benchmark_base at 1.121 m.
+  EXPECT_GT(left_target.translation().y(), 0.1);
+  EXPECT_LT(right_target.translation().y(), -0.1);
+  left_target.translation() += Eigen::Vector3d(0.05, 0.0, 0.0);
+  right_target.translation() += Eigen::Vector3d(0.0, 0.0, 0.05);
+
+  constexpr double kHorizon = 0.2;
+  constexpr double kDt = 0.002;
+  double t = 100.0;
+  controller->Reset(q, t);
+  for (int tick = 0; tick < 1500; ++tick) {
+    if (tick % 50 == 0) {
+      Eigen::Isometry3d left_anchor, right_anchor;
+      controller->GetEePoses(q, left_anchor, right_anchor);
+      controller->SetTargetTrajectory({t, t + kHorizon}, {left_anchor, left_target}, {right_anchor, right_target});
+    }
+    controller->AdvanceOnce();
+    t += kDt;
+    Eigen::VectorXd q_cmd;
+    if (controller->Evaluate(t, q_cmd)) {
+      q = q_cmd;
+    }
+  }
+
+  Eigen::VectorXd left_error, right_error;
+  controller->Jnt2CartDualError(left_target, right_target, q, left_error, right_error);
+  EXPECT_LT(left_error.head<3>().norm(), 0.015);
+  EXPECT_LT(right_error.head<3>().norm(), 0.015);
+  EXPECT_LT(left_error.tail<3>().norm(), 0.04);
+  EXPECT_LT(right_error.tail<3>().norm(), 0.04);
+  // The torso is a redundancy, regularized toward q_pd: it helps but does not fold.
+  EXPECT_LT((q.head<4>() - robot.startup.torso_q_pd).cwiseAbs().maxCoeff(), 0.3);
 }
 
 }  // namespace

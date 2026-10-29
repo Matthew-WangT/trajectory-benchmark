@@ -89,8 +89,9 @@ class ArmModel:
         return self.data.oMf[self.frame_ids[arm]]
 
     def jac_pos_series(self, q_series: np.ndarray, arm: ArmSpec) -> np.ndarray:
-        """(N,3,7) position Jacobian of the arm's end effector, base-aligned, columns = arm joints."""
-        cols = self.idx_v[self.profile.joint_index(arm)]
+        """(N,3,J) position Jacobian of the arm's end effector, base-aligned, columns = the joints of
+        RobotProfile.chain_index (the torso, if any, and the arm)."""
+        cols = self.idx_v[self.profile.chain_index(arm)]
         fid = self.frame_ids[arm.name]
         out = np.zeros((len(q_series), 3, len(cols)))
         for n, q in enumerate(q_series):

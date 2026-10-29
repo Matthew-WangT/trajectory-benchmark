@@ -41,12 +41,18 @@ void ReadJoints(const YAML::Node& node, const char* key, arm::JointVector& value
   value = Eigen::Map<const arm::JointVector>(values.data());
 }
 
-void ReadNames(const YAML::Node& node, const char* key, std::array<std::string, arm::kArmDoF>& value) {
-  const std::vector<std::string> values = node[key].as<std::vector<std::string>>();
-  if (values.size() != arm::kArmDoF) {
-    throw std::runtime_error(std::string(key) + " expects " + std::to_string(arm::kArmDoF) + " names");
+// `size` -1 takes any count and an absent key.
+void ReadNames(const YAML::Node& node, const char* key, int size, std::vector<std::string>& value) {
+  if (!node[key]) {
+    if (size >= 0) {
+      throw std::runtime_error(std::string("joints.") + key + " is missing");
+    }
+    return;
   }
-  std::copy(values.begin(), values.end(), value.begin());
+  value = node[key].as<std::vector<std::string>>();
+  if (size >= 0 && static_cast<int>(value.size()) != size) {
+    throw std::runtime_error(std::string(key) + " expects " + std::to_string(size) + " names");
+  }
 }
 
 std::string ResolvePath(const std::filesystem::path& base_dir, const std::string& path) {
@@ -58,6 +64,19 @@ std::string ResolvePath(const std::filesystem::path& base_dir, const std::string
 
 }  // namespace
 
+Joints StartupConfig::QPd() const {
+  Joints q(torso_q_pd.size() + 2 * arm::kArmDoF);
+  q << torso_q_pd, left_q_pd, right_q_pd;
+  return q;
+}
+
+std::vector<std::string> RobotModelConfig::JointNames() const {
+  std::vector<std::string> names = torso_joints;
+  names.insert(names.end(), left_joints.begin(), left_joints.end());
+  names.insert(names.end(), right_joints.begin(), right_joints.end());
+  return names;
+}
+
 RobotModelConfig LoadRobotModelConfig(const std::string& robot_dir) {
   const std::filesystem::path base_dir = std::filesystem::weakly_canonical(robot_dir);
   const YAML::Node root = YAML::LoadFile((base_dir / "robot.yaml").string());
@@ -66,8 +85,17 @@ RobotModelConfig LoadRobotModelConfig(const std::string& robot_dir) {
   config.name = root["name"] ? root["name"].as<std::string>() : base_dir.filename().string();
   config.urdf = ResolvePath(base_dir, root["urdf"].as<std::string>());
   config.controller_yaml = ResolvePath(base_dir, root["controller"].as<std::string>());
-  ReadNames(root["joints"], "left", config.left_joints);
-  ReadNames(root["joints"], "right", config.right_joints);
+  ReadNames(root["joints"], "torso", -1, config.torso_joints);
+  ReadNames(root["joints"], "left", arm::kArmDoF, config.left_joints);
+  ReadNames(root["joints"], "right", arm::kArmDoF, config.right_joints);
+  if (root["ee_frames"]) {
+    config.left_ee_frame = root["ee_frames"]["left"].as<std::string>();
+    config.right_ee_frame = root["ee_frames"]["right"].as<std::string>();
+  }
+  if (config.dof() > kMaxJoints) {
+    throw std::runtime_error(config.name + " has " + std::to_string(config.dof()) + " joints, above " +
+                             std::to_string(kMaxJoints));
+  }
 
   const YAML::Node ik = root["ik"];
   ReadIfPresent(ik, "evaluate_every_ticks", config.evaluate_every_ticks);
@@ -87,6 +115,13 @@ RobotModelConfig LoadRobotModelConfig(const std::string& robot_dir) {
   ReadIfPresent(ik, "warm_up_s", config.mpc_warm_up_s);
 
   const YAML::Node startup = root["startup"];
+  if (config.torso_dof() > 0) {
+    const std::vector<double> values = startup["q_pd"]["torso"].as<std::vector<double>>();
+    if (static_cast<int>(values.size()) != config.torso_dof()) {
+      throw std::runtime_error("startup.q_pd.torso expects " + std::to_string(config.torso_dof()) + " values");
+    }
+    config.startup.torso_q_pd = Eigen::Map<const Eigen::VectorXd>(values.data(), config.torso_dof());
+  }
   ReadJoints(startup["q_pd"], "left", config.startup.left_q_pd);
   ReadJoints(startup["q_pd"], "right", config.startup.right_q_pd);
   ReadIfPresent(startup, "joint_speed_rad_s", config.startup.joint_speed_rad_s);

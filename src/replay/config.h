@@ -1,16 +1,22 @@
 #pragma once
 
-#include <array>
 #include <string>
+#include <vector>
 
 #include "arm/arm_interface.h"
+#include "replay/joints.h"
 
 namespace replay {
 
 struct StartupConfig {
-  // Joint pose the S0 phase moves to, the PD stand pose of the reference pipeline.
+  // Joint pose the S0 phase moves to, the PD stand pose of the reference pipeline. The torso one is empty on a
+  // fixed-base dual arm.
+  Joints torso_q_pd;
   arm::JointVector left_q_pd = arm::JointVector::Zero();
   arm::JointVector right_q_pd = arm::JointVector::Zero();
+
+  // q_pd as one joint vector: torso, left arm, right arm.
+  Joints QPd() const;
   // S0 duration is max(max|dq| / joint_speed, min_duration).
   double joint_speed_rad_s = 0.3;
   double joint_min_duration_s = 3.0;
@@ -68,9 +74,14 @@ struct RobotModelConfig {
   std::string dir;
   std::string urdf;
   std::string controller_yaml;
-  // URDF joint names of each arm, in the order of the joint vector.
-  std::array<std::string, arm::kArmDoF> left_joints;
-  std::array<std::string, arm::kArmDoF> right_joints;
+  // URDF joint names of the torso (none on a fixed-base dual arm) and of each arm. The joint vector holds the torso,
+  // the left and the right arm joints in this order.
+  std::vector<std::string> torso_joints;
+  std::vector<std::string> left_joints;
+  std::vector<std::string> right_joints;
+  // URDF frames of the TCPs.
+  std::string left_ee_frame;
+  std::string right_ee_frame;
   // The IK controller is evaluated every `evaluate_every_ticks` loop ticks of 1 ms.
   int evaluate_every_ticks = 2;
   // The command is sent every `send_every_ticks` loop ticks of 1 ms, see robots/marvin/robot.yaml.
@@ -84,6 +95,14 @@ struct RobotModelConfig {
   double mpc_warm_up_s = 1.0;
   StartupConfig startup;
   SolveConfig solve;
+
+  int torso_dof() const { return static_cast<int>(torso_joints.size()); }
+  int dof() const { return torso_dof() + 2 * arm::kArmDoF; }
+  // Index of the first left / right arm joint in the joint vector.
+  int left_offset() const { return torso_dof(); }
+  int right_offset() const { return torso_dof() + arm::kArmDoF; }
+  // All joint names in the order of the joint vector.
+  std::vector<std::string> JointNames() const;
 };
 
 struct ReplayConfig {

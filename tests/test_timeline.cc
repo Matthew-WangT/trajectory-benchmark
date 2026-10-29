@@ -40,10 +40,10 @@ TEST(TimelineTest, PhaseDurations) {
   const StartupConfig config = MakeConfig();
   const CaseTrajectory traj = MakeCase();
   // 1.5 rad at 0.3 rad/s takes 5 s, above the 3 s minimum.
-  const arm::JointVector left_q0 = arm::JointVector::Constant(-1.0);
-  const arm::JointVector right_q0 = arm::JointVector::Constant(-0.5);
+  Joints q0(2 * arm::kArmDoF);
+  q0 << arm::JointVector::Constant(-1.0), arm::JointVector::Constant(-0.5);
   // 0.2 m at 0.1 m/s takes 2 s and 1 rad at 0.5 rad/s takes 2 s, so the 3 s minimum applies.
-  const Timeline timeline(config, traj, left_q0, right_q0, Pose(0.5, 0.3, 0.5, 1.0), Pose(0.5, -0.3, 0.7, 0.0));
+  const Timeline timeline(config, traj, q0, Pose(0.5, 0.3, 0.5, 1.0), Pose(0.5, -0.3, 0.7, 0.0));
 
   EXPECT_NEAR(timeline.s1_start(), 5.0, 1e-9);
   EXPECT_NEAR(timeline.s2_start(), 8.0, 1e-9);
@@ -60,39 +60,41 @@ TEST(TimelineTest, PhaseDurations) {
 
 TEST(TimelineTest, JointMoveIsContinuous) {
   const StartupConfig config = MakeConfig();
-  const arm::JointVector left_q0 = arm::JointVector::Zero();
-  const arm::JointVector right_q0 = arm::JointVector::Zero();
-  const Timeline timeline(config, MakeCase(), left_q0, right_q0, Pose(0.5, 0.3, 0.7, 0.0), Pose(0.5, -0.3, 0.7, 0.0));
-  arm::JointVector left_q, right_q;
-  timeline.JointCommand(0.0, left_q, right_q);
-  EXPECT_TRUE(left_q.isApprox(left_q0));
-  timeline.JointCommand(timeline.s1_start(), left_q, right_q);
-  EXPECT_TRUE(left_q.isApprox(config.left_q_pd));
-  EXPECT_TRUE(right_q.isApprox(config.right_q_pd));
+  const Joints q0 = Joints::Zero(2 * arm::kArmDoF);
+  const Timeline timeline(config, MakeCase(), q0, Pose(0.5, 0.3, 0.7, 0.0), Pose(0.5, -0.3, 0.7, 0.0));
+  EXPECT_TRUE(timeline.JointCommand(0.0).isApprox(q0));
+  EXPECT_TRUE(timeline.JointCommand(timeline.s1_start()).isApprox(config.QPd()));
   // Holds beyond the phase.
-  timeline.JointCommand(timeline.s1_start() + 10.0, left_q, right_q);
-  EXPECT_TRUE(left_q.isApprox(config.left_q_pd));
+  EXPECT_TRUE(timeline.JointCommand(timeline.s1_start() + 10.0).isApprox(config.QPd()));
+}
+
+TEST(TimelineTest, JointMoveIncludesTheTorso) {
+  StartupConfig config = MakeConfig();
+  config.torso_q_pd = Joints::Constant(4, 0.2);
+  const Joints q0 = Joints::Zero(4 + 2 * arm::kArmDoF);
+  const Timeline timeline(config, MakeCase(), q0, Pose(0.5, 0.3, 0.7, 0.0), Pose(0.5, -0.3, 0.7, 0.0));
+  const Joints q_end = timeline.JointCommand(timeline.s1_start());
+  ASSERT_EQ(q_end.size(), 18);
+  EXPECT_TRUE(q_end.head(4).isApprox(Joints::Constant(4, 0.2)));
+  EXPECT_TRUE(q_end.segment(4, arm::kArmDoF).isApprox(config.left_q_pd));
+  EXPECT_TRUE(q_end.tail(arm::kArmDoF).isApprox(config.right_q_pd));
 }
 
 TEST(TimelineTest, StartsWithS1WithoutS0) {
   // The solve starts at q_pd with no S0 minimum duration, so the run opens with the TCP move.
   StartupConfig config = MakeConfig();
   config.joint_min_duration_s = 0.0;
-  const Timeline timeline(config, MakeCase(), config.left_q_pd, config.right_q_pd, Pose(0.5, 0.3, 0.7, 0.0),
-                          Pose(0.5, -0.3, 0.7, 0.0));
+  const Timeline timeline(config, MakeCase(), config.QPd(), Pose(0.5, 0.3, 0.7, 0.0), Pose(0.5, -0.3, 0.7, 0.0));
   EXPECT_DOUBLE_EQ(timeline.s1_start(), 0.0);
   EXPECT_EQ(timeline.PhaseAt(0.0), Phase::kS1EefMove);
-  arm::JointVector left_q, right_q;
-  timeline.JointCommand(0.0, left_q, right_q);
-  EXPECT_TRUE(left_q.isApprox(config.left_q_pd));
-  EXPECT_TRUE(right_q.isApprox(config.right_q_pd));
+  EXPECT_TRUE(timeline.JointCommand(0.0).isApprox(config.QPd()));
 }
 
 TEST(TimelineTest, WaypointsAreCausalAndConnected) {
   const StartupConfig config = MakeConfig();
   const CaseTrajectory traj = MakeCase();
   const Eigen::Isometry3d left_fk_pd = Pose(0.4, 0.3, 0.6, 0.5);
-  const Timeline timeline(config, traj, config.left_q_pd, config.right_q_pd, left_fk_pd, Pose(0.5, -0.3, 0.7, 0.0));
+  const Timeline timeline(config, traj, config.QPd(), left_fk_pd, Pose(0.5, -0.3, 0.7, 0.0));
   const auto& waypoints = timeline.waypoints();
   ASSERT_GT(waypoints.size(), traj.t.size());
 

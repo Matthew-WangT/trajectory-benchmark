@@ -1,0 +1,52 @@
+# Astribot S1 with F90C grippers: a 4 joint torso and two 7 joint arms, as the IK controller, the trajectory solve
+# and the replay see them. Joint values in rad, relative paths against this folder. See README.md.
+name: s1
+urdf: urdf/s1_with_gripper.urdf
+# One OCS2 MPC over the torso and both arms (whole-body IK).
+controller: ocs2/controller.yaml
+
+# The joint vector holds the torso, the left and the right arm in this order.
+joints:
+  torso: [astribot_torso_joint_1, astribot_torso_joint_2, astribot_torso_joint_3, astribot_torso_joint_4]
+  left: [astribot_arm_left_joint_1, astribot_arm_left_joint_2, astribot_arm_left_joint_3, astribot_arm_left_joint_4,
+         astribot_arm_left_joint_5, astribot_arm_left_joint_6, astribot_arm_left_joint_7]
+  right: [astribot_arm_right_joint_1, astribot_arm_right_joint_2, astribot_arm_right_joint_3,
+          astribot_arm_right_joint_4, astribot_arm_right_joint_5, astribot_arm_right_joint_6,
+          astribot_arm_right_joint_7]
+ee_frames:
+  left: left_gripper_f90c_end_effector_link
+  right: right_gripper_f90c_end_effector_link
+# No manufacturer joint acceleration limits, the solve reports the accelerations without a margin.
+
+ik:
+  evaluate_every_ticks: 2
+  send_every_ticks: 2
+  # See robots/marvin/robot.yaml.
+  reference_mode: lookahead
+  reference_window_s: 0
+  reference_lead_s: 0
+  warm_up_s: 1.0
+
+startup:
+  # S0 target, the home pose of the SDK (Astribot.move_to_home); the solve starts here.
+  q_pd:
+    torso: [0.29, -0.58, 0.29, 0.0]
+    left: [0.159, -0.022, -1.42, 1.66, -0.345, 0.115, 0.125]
+    right: [-0.159, -0.022, 1.42, 1.66, 0.345, 0.115, -0.125]
+  joint_speed_rad_s: 0.3
+  joint_min_duration_s: 3.0
+  eef_linear_speed_m_s: 0.1
+  eef_angular_speed_rad_s: 0.5
+  eef_min_duration_s: 3.0
+  eef_waypoint_rate_hz: 200.0
+  hold_s: 2.0
+  end_hold_s: 2.0
+
+solve:
+  rt_cpu: -1
+  rt_priority: 80
+  joint_limit_margin_rad: 0.02
+  max_consecutive_holds: 50
+  acc_lowpass_hz: 20.0
+  # The S1 is driven through the SDK whole-body control, not a PD velocity feedforward: without
+  # precheck_max_joint_vel_deg_s the real-run precheck bounds each joint by its URDF velocity limit.

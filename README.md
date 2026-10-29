@@ -20,12 +20,14 @@ Marvin 上的回放程序（OCS2 滚动时域 IK + 关节阻抗）、交付 CSV 
 
 ```
 src/          replay 程序：mpc/（移植的 IK controller）、arm/（Marvin SDK / dry-run）、replay/（时间轴、安全、录制）
+src/s1/       Astribot S1 真机：与 SDK sidecar 的 UDP 协议、运行循环、安全检查
 robots/       每台机器人一个目录：robot.yaml（关节、TCP、加速度限值、IK 与起始参数）、urdf/、meshes/、ocs2/（IK controller 与 task .info）
-config/       marvin.yaml（真机：IP、增益、工具、安全参数，引用 robots/marvin）
-third_party/  Marvin 控制 SDK（Apache-2.0）、OCS2 子集（BSD-3）
+config/       marvin.yaml（真机：IP、增益、工具、安全参数，引用 robots/marvin）、s1.yaml（S1 真机：sidecar、坐标、安全开关）
+third_party/  Marvin 控制 SDK（Apache-2.0）、OCS2 子集（BSD-3，加了多末端）、astribot_sdk（submodule，BSD-3，只有 S1 真机需要）
+docker/       主镜像；s1_bridge/ 是 S1 SDK sidecar 的镜像（ROS 2 Humble）
 python/       trackeval 评价包
 benchmark.sh  唯一入口：构建 + 菜单 + replay + 评价 + 打印
-scripts/      benchmark.py（菜单与流程）、analyze_solve.py、view_solve.py（3D 回放）、make_delivery_csv.py、evaluate.py、summarize.py
+scripts/      benchmark.py（菜单与流程）、analyze_solve.py、view_solve.py（3D 回放）、make_delivery_csv.py、evaluate.py、summarize.py、s1_bridge.py（S1 SDK sidecar）
 ```
 
 | 用例 | 线速度 p99 / max（左，右） | 角速度 p99 / max（左，右） | 两臂最小间距 |
@@ -42,3 +44,15 @@ scripts/      benchmark.py（菜单与流程）、analyze_solve.py、view_solve.
 ```
 
 安装坐标、OCS2 参数和约束说明见 [robots/ar5_dual/README.md](robots/ar5_dual/README.md)。
+
+### Astribot S1（带腰）
+
+`robots/s1` 有 4 个腰关节，两臂各 7 个关节，装 F90C 夹爪。轨迹求解用 OCS2 全身 IK（一个 MPC，18 个关节）；真机通过 SDK 的 WBC 流式跟踪 TCP：
+
+```sh
+./benchmark.sh --mode solve --case case02_fold_clothes_spd50 --robot s1 --no-view
+./benchmark.sh --mode dry --case case02_fold_clothes_spd50 --config s1.yaml --runs 1 -y   # sidecar 仿真机器人
+./benchmark.sh --mode real --case case02_fold_clothes_spd50 --config s1.yaml --stage connect
+```
+
+链路、协议、安全开关见 [docs/replay.md](docs/replay.md#astribot-s1)；模型和坐标约定见 [robots/s1/README.md](robots/s1/README.md)。

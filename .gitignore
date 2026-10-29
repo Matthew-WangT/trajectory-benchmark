@@ -2,3 +2,5 @@
 __pycache__/
 build/
 runs/
+# Written into the working directory by the Astribot SDK when a command of it fails.
+astribot_fatal_exec_error.txt

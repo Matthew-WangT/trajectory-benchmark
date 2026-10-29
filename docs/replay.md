@@ -108,13 +108,40 @@ docker/run.sh python3 scripts/evaluate.py their.csv --reference data/case02_fold
   - 以前的求解也能回看：`docker/run.sh python3 scripts/view_solve.py runs/<case>/solve_<robot>_<时间戳> [--run 2]`。
   - 不需要回放时加 `--no-view`。
   - 网格在 `robots/<name>/meshes/`（走 LFS），URDF 里写相对路径。
-- **新增一台机器人**（必须是双臂，每臂 7 个关节）：
+- **新增一台机器人**（双臂，每臂 7 个关节；可以带一个两臂共用的腰）：
   1. 把 `robots/marvin` 拷贝成 `robots/<name>`；
   2. 换上自己的 URDF 和网格（网格用相对 URDF 的路径）；
   3. 在 `robot.yaml` 里改关节名、TCP frame、`q_pd`、加速度限值；
   4. 在两份 `.info` 里改 `baseFrame`、`eeFrame` 和 `removeJoints`。
 
+  有腰的机器人参照 `robots/s1`：`joints.torso` 和 `startup.q_pd.torso` 列出腰关节；`ocs2/controller.yaml` 用 `type: whole_body`，配一份 `.info`，在 `model_information.eeFrames` 里依次写左、右 TCP。这样就是一个 MPC 同时跟踪两个 TCP，腰作为冗余参与求解。关节向量的顺序是腰、左臂、右臂；所有 CSV 里，腰的列以 `t_` 开头，排在两臂前面。
+
   菜单会自动列出新机器人。第一次求解要生成 CppAD 库，需要几分钟。
+
+## Astribot S1
+
+S1 有 4 个腰关节，两臂各 7 个关节，装 F90C 夹爪。模型、限位和坐标约定见 [robots/s1/README.md](../robots/s1/README.md)。
+
+- **轨迹求解**：`./benchmark.sh --mode solve --robot s1`。用 OCS2 全身 IK 解 18 个关节，流程和指标同上一节，表里多出一列"腰"。
+- **真机**：`./benchmark.sh --mode real --config s1.yaml`。S1 只能通过它的 Python SDK 控制（ROS 2 Humble），所以链路分成两个进程：
+  - sidecar `scripts/s1_bridge.py`：跑在 `docker/s1_bridge` 镜像里，SDK 是 submodule `third_party/astribot_sdk`（公开仓库，先执行 `git submodule update --init third_party/astribot_sdk`）。`benchmark.sh` 看到 S1 配置加真机模式时，会在宿主机上自动启动它，日志在 `runs/s1_bridge.log`。用交互菜单时，要另开一个终端运行 `docker/s1_bridge/run.sh`。
+  - replay：`build/bin/replay --config config/s1.yaml`，在 127.0.0.1 的 UDP 端口 `bridge.port` 上等 sidecar。
+  - **时钟在 sidecar 一侧**：sidecar 以 `Astribot(freq=250)` 的周期循环，每个周期读一次机器人（18 关节的 q、dq、τ，SDK desired 关节，两臂 SDK 末端位姿），把反馈发给 replay，在 `bridge.reply_timeout_s` 内等对应 `seq` 的命令再下发。超时就重发上一帧并记一次 miss，连续 miss 超过 `bridge.max_consecutive_miss` 就停发。第 k 个周期的命令取 run 时钟上 k / freq 处的值，相邻两帧正好相隔一个 SDK 周期；SDK 正是按这个周期把位置差分成速度前馈的。帧格式见 `src/s1/bridge_protocol.h`。
+  - **命令**：S0 用 `set_joints_position(腰, 左, 右; direct)` 下发 18 维最小加加速度插值。从 S1 起改用 `set_cartesian_pose(左, 右; direct, use_wbc=True, add_default_torso=False)`，腰交给 SDK 的 WBC，作为冗余自由度；设 `torso_command: hold` 时，S1 开始时的腰位姿也每帧一起发下去。S1 的起点取 S0 结束时实测的 TCP，避免切换模式时跳变。
+  - **目标取样**：S3 每个周期取 t 两侧的两个轨迹点，位置线性插值、姿态 slerp，也就是向前看一个轨迹采样（约 5 ms）。这是对规则 3.3 的偏离，要在报告里写明。零阶保持在 200 Hz 轨迹和 250 Hz 下发之间会产生拍频，速度前馈会周期性地掉到 0。
+  - **坐标**：轨迹在 `benchmark_base`（BASE）。下发前换算成 SDK 末端 `astribot_arm_*_end_effector` 在 chassis 系下的位姿，用到 `sdk_frame.torso_base_in_chassis`（0.097 m）和 URDF 里 TCP 到 SDK 末端的固定变换。connect 阶段会把 SDK 上报的末端位置和"实测关节 + URDF 做 FK"的结果比较，相差超过 `max_frame_mismatch_m` 就拒绝启动。
+  - **安全**：每个周期检查五项，每项都可以单独关掉（`safety.<名字>.enable`），关掉的写进 `run_info.json` 的 `safety_disabled`，结果表也会提示。
+    - `joint_limit`：实测关节和 desired 关节都在 URDF 限位减去 `margin_rad` 以内；
+    - `joint_velocity`：实测速度，以及 desired 关节在一个周期内的步长，都低于 `ratio` 乘 URDF 速度限值，切换到 WBC 时的跳变由它拦住；
+    - `tcp_error`：S1–S3 阶段，实测 TCP 和目标的距离不超过 `max_m`；
+    - `arm_distance`：两个 TCP 的间距不小于 `min_m`；
+    - `link`：`feedback_timeout_s` 内要收到反馈，sidecar 连续 miss 不超过上限。
+
+    任何一项越线，就回 stop：sidecar 停止下发，机器人停在最后一个 desired 位置。不调用 `stop_robot`，也不回 home。
+  - **录制**：每个周期一行。`raw_cmd.csv` 里有 TCP 目标、SDK 末端命令、`q_cmd`（SDK desired 关节：S0 是我们的关节命令，S1 起是 WBC 的输出）和 `q_send`；`raw_fb.csv` 里有 18 维的 q、dq、τ、q_desired，SDK 末端位姿，以及 SDK 读取和命令调用的耗时、miss 计数。交付 CSV 的 TCP 实测值是"实测关节 + URDF"做 FK 得到的；关节跟踪评全部 18 个关节，腰单独成组。
+  - **预检**：沿用轨迹求解，但 solve 用的是 OCS2 全身 IK，真机用的是 SDK 的 WBC，两者不是同一个求解器。预检只能说明轨迹放在这里可达、限位和速度有余量，预测不了 SDK 实际解出的关节角。
+  - **不接机器人**：`./benchmark.sh --mode dry --config s1.yaml` 会在主镜像里起一个 `scripts/s1_bridge.py --fake`。它在 URDF 上模拟机器人：关节命令理想跟随，笛卡尔命令每周期向目标做几步阻尼最小二乘，近似 WBC 每拍一次迭代。用来检查协议、录制和评价链路，结果不代表 S1。
+  - 分步上机：`--stage connect`（只连接，核对坐标和初始偏差）、`S0`（关节移到 `q_pd` 并保持）、`S2`（慢速移到起始位姿并静止），最后才是 `full`。
 
 ## 报告内容
 

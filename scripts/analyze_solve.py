@@ -34,7 +34,6 @@ from trackeval.util import quat_angle_deg, rms  # noqa: E402
 
 POSE = ("x", "y", "z", "qx", "qy", "qz", "qw")
 ARMS = (("left", "l"), ("right", "r"))
-DOF = 7
 STATS = ("rms", "p50", "p95", "p99", "max")
 LAGS_S = np.arange(-0.1, 0.2 + 1e-9, 0.001)
 PHASE_COLORS = {"S1": "#dbe9f6", "S2": "#eeeeee", "S4": "#eeeeee"}
@@ -85,7 +84,7 @@ class Solve:
         self.t = np.arange(t_raw[0], t_raw[-1] + 1e-9, dt)
         hold = np.clip(np.searchsorted(t_raw, self.t, side="right") - 1, 0, len(t_raw) - 1)
         self.phase = phase[hold]
-        q_names = [f"{p}_q_cmd_{j}" for _, p in ARMS for j in range(1, DOF + 1)]
+        q_names = [f"{g.prefix}_q_cmd_{j}" for g in profile.groups for j in range(1, len(g.joints) + 1)]
         q_raw = values[:, [col[n] for n in q_names]]
         self.q_raw = q_raw
         self.q = np.column_stack([np.interp(self.t, t_raw, q_raw[:, j]) for j in range(q_raw.shape[1])])
@@ -152,7 +151,8 @@ def analyze(solve: Solve, profile, model: ArmModel, cfg: dict, controller: dict,
 
     rep.section("关节余量与分布 (S3)")
     rep.add("位置余量 = 到 URDF 限位的最小距离; 速度/加速度余量 = 1 - max|x| / 限值. 速度 [deg/s], 加速度 [deg/s^2]")
-    rep.add(f"  {'关节':10s} {'位置余量 deg (%行程)':>20s} {'速度 rms/p50/p95/p99/max':>36s} {'余量':>6s}"
+    w = max(10, *(len(n) for n in names))
+    rep.add(f"  {'关节':{w}s} {'位置余量 deg (%行程)':>20s} {'速度 rms/p50/p95/p99/max':>36s} {'余量':>6s}"
             f" {'加速度 rms/p50/p95/p99/max':>40s} {'余量':>6s} {'原始 p99/max':>16s}")
     for j, name in enumerate(names):
         span = upper[j] - lower[j]
@@ -160,7 +160,7 @@ def analyze(solve: Solve, profile, model: ArmModel, cfg: dict, controller: dict,
         acc_margin = 1 - st_a["max"][j] / acc_limit[j] if acc_limit is not None else None
         v = "/".join(f"{deg(st_v[s][j]):.0f}" for s in STATS)
         a = "/".join(f"{deg(st_a[s][j]):.0f}" for s in STATS)
-        rep.add(f"  {name:10s} {deg(pos_margin[j]):9.1f} ({100 * pos_margin[j] / span:4.1f}%)  {v:>34s} "
+        rep.add(f"  {name:{w}s} {deg(pos_margin[j]):9.1f} ({100 * pos_margin[j] / span:4.1f}%)  {v:>34s} "
                 f"{100 * vel_margin:5.0f}% {a:>40s} {'-' if acc_margin is None else f'{100 * acc_margin:5.0f}%':>6s}"
                 f" {deg(st_raw['p99'][j]):7.0f}/{deg(st_raw['max'][j]):.0f}")
         m[f"margin.pos_deg.{name}"] = float(deg(pos_margin[j]))
@@ -173,8 +173,8 @@ def analyze(solve: Solve, profile, model: ArmModel, cfg: dict, controller: dict,
             m[f"acc.{s}_deg_s2.{name}"] = float(deg(st_a[s][j]))
         m[f"acc_raw.p99_deg_s2.{name}"] = float(deg(st_raw["p99"][j]))
         m[f"acc_raw.max_deg_s2.{name}"] = float(deg(st_raw["max"][j]))
-    for arm, p in ARMS:
-        idx = [names.index(n) for n in profile.arm(arm).joints]
+    for group in profile.groups:
+        arm, idx = group.name, [names.index(n) for n in group.joints]
         worst = idx[int(np.argmin(pos_margin[idx]))]
         m[f"margin.{arm}.pos_deg_min"] = float(deg(pos_margin[worst]))
         m[f"margin.{arm}.pos_joint_min"] = names[worst]
@@ -213,19 +213,24 @@ def analyze(solve: Solve, profile, model: ArmModel, cfg: dict, controller: dict,
         rep.add(f"  {labels[key]:40s} {v['count']:6d} 次, 首次 {first}{extra}")
         m[f"violation.{key}.count"] = v["count"]
 
-    limit = cfg["solve"].get("precheck_max_joint_vel_deg_s", 180.0)
-    peak = float(deg(np.abs(solve.dq[ik]).max()))
+    # One limit for all joints (the PD velocity feedforward of Marvin), or without it the URDF limit of each joint. The
+    # precheck reports the joint closest to its limit.
+    limits = np.full(len(names), cfg["solve"]["precheck_max_joint_vel_deg_s"]) \
+        if "precheck_max_joint_vel_deg_s" in cfg["solve"] else deg(vel_limit)
+    peaks = deg(np.abs(solve.dq[ik]).max(axis=0))
+    j = int(np.argmax(peaks / limits))
+    peak, limit = float(peaks[j]), float(limits[j])
     reasons = []
     if peak >= limit:
-        reasons.append(f"关节速度峰值 {peak:.1f} deg/s 不低于 {limit:.0f} deg/s")
+        reasons.append(f"{names[j]} 速度峰值 {peak:.1f} deg/s 不低于 {limit:.0f} deg/s")
     if violations["position"]["count"]:
         reasons.append(f"位置越限 {violations['position']['count']} 次")
     if solve.info["status"] != "ok":
         reasons.append(f"求解失败: {solve.info['reason']}")
-    precheck = {"pass": not reasons, "max_joint_vel_deg_s": peak, "limit_deg_s": limit,
+    precheck = {"pass": not reasons, "max_joint_vel_deg_s": peak, "limit_deg_s": limit, "joint": names[j],
                 "position_violations": violations["position"]["count"], "reason": "; ".join(reasons)}
     rep.section("真机预检")
-    rep.add(f"  S1..S4 关节速度峰值 {peak:.1f} deg/s (限 {limit:.0f}), 位置越限 "
+    rep.add(f"  S1..S4 关节速度最接近限值: {names[j]} {peak:.1f} deg/s (限 {limit:.0f}), 位置越限 "
             f"{violations['position']['count']} 次 -> {'通过' if precheck['pass'] else '不通过: ' + precheck['reason']}")
     m["precheck.max_joint_vel_deg_s"] = peak
     return {"metrics": m, "violations": violations, "precheck": precheck}
@@ -271,10 +276,22 @@ def plot(solve: Solve, profile, model: ArmModel, out: Path, dpi: int) -> None:
         fig.savefig(out / f"tcp_{arm}.png", dpi=dpi)
         plt.close(fig)
 
+    # One column per joint group (torso, left, right), one row per joint.
+    rows = max(len(g.joints) for g in profile.groups)
+    cell = {name: (r, c) for c, g in enumerate(profile.groups) for r, name in enumerate(g.joints)}
+
+    def grid(sharex: bool):
+        fig, axes = plt.subplots(rows, len(profile.groups), figsize=(8 * len(profile.groups), 2.1 * rows),
+                                 sharex=sharex, squeeze=False)
+        for c, g in enumerate(profile.groups):
+            for r in range(len(g.joints), rows):
+                axes[r, c].set_visible(False)
+        return fig, axes
+
     def joint_grid(title: str, file: str, series: np.ndarray, unit: str, lo=None, hi=None, red=None) -> None:
-        fig, axes = plt.subplots(DOF, 2, figsize=(16, 2.1 * DOF), sharex=True, squeeze=False)
+        fig, axes = grid(sharex=True)
         for j, name in enumerate(names):
-            ax = axes[j % DOF, j // DOF]
+            ax = axes[cell[name]]
             shade(ax, solve)
             ax.plot(t, series[:, j], lw=0.7)
             if red is not None and red[:, j].any():
@@ -283,8 +300,9 @@ def plot(solve: Solve, profile, model: ArmModel, out: Path, dpi: int) -> None:
                 if bound is not None:
                     ax.axhline(bound[j], color="r", lw=0.8, ls="--")
             ax.set_ylabel(f"{name} [{unit}]", fontsize=8)
-        for ax in axes[-1]:
-            ax.set_xlabel("run time [s]")
+        for c, g in enumerate(profile.groups):
+            axes[len(g.joints) - 1, c].set_xlabel("run time [s]")
+            axes[len(g.joints) - 1, c].tick_params(labelbottom=True)
         fig.suptitle(title)
         fig.tight_layout()
         fig.savefig(out / file, dpi=dpi)
@@ -301,9 +319,9 @@ def plot(solve: Solve, profile, model: ArmModel, out: Path, dpi: int) -> None:
                None if acc is None else -acc, acc, None if acc is None else np.abs(solve.ddq) > np.radians(acc))
 
     def dist(title: str, file: str, series: np.ndarray, unit: str, limit) -> None:
-        fig, axes = plt.subplots(DOF, 2, figsize=(16, 2.1 * DOF), squeeze=False)
+        fig, axes = grid(sharex=False)
         for j, name in enumerate(names):
-            ax = axes[j % DOF, j // DOF]
+            ax = axes[cell[name]]
             x = np.abs(series[solve.s3, j])
             ax.hist(x, bins=80, color="#7aa6d2")
             for s, color in (("p50", "g"), ("p95", "orange"), ("p99", "r")):
@@ -328,7 +346,7 @@ def write_solve_csv(solve: Solve, profile, path: Path) -> None:
         columns += [f"{p}_target_{f}" for f in POSE] + [f"{p}_solved_{f}" for f in POSE]
         blocks += [solve.target[arm], solve.solved[arm]]
     for stem, values in (("q_cmd", solve.q), ("dq", solve.dq), ("ddq", solve.ddq)):
-        columns += [f"{p}_{stem}_{j}" for _, p in ARMS for j in range(1, DOF + 1)]
+        columns += [f"{g.prefix}_{stem}_{j}" for g in profile.groups for j in range(1, len(g.joints) + 1)]
         blocks.append(values)
     values = np.column_stack([solve.t, *blocks])
     with open(path, "w") as f:
@@ -373,7 +391,8 @@ def main() -> int:
     lowpass = float(cfg["solve"].get("acc_lowpass_hz", 20.0))
 
     rep = Report(echo=True)
-    rep.add(f"轨迹求解 {info['case']} on {profile.name}: OCS2 MPC IK 实时求解, 理想跟随 (q_meas = q_cmd), "
+    rep.add(f"轨迹求解 {info['case']} on {profile.name}: OCS2 MPC IK 实时求解"
+            f"{' (全身: 腰 + 双臂一个 MPC)' if profile.torso else ''}, 理想跟随 (q_meas = q_cmd), "
             f"IK {info['reference_mode']} 参考, {len(runs)} 次")
     rep.add(f"统计只算 S3; 加速度为 {lowpass:.0f} Hz 4 阶零相位低通后差分; 实时求解每次结果略有差异"
             f"{', 汇总取各项最差' if len(runs) > 1 else ''}")

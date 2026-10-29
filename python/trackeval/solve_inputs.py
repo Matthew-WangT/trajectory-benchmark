@@ -21,9 +21,11 @@ def input_files(robot_dir: Path, case_dir: Path) -> dict[str, Path]:
         "robot/" + Path(robot["urdf"]).name: (robot_dir / robot["urdf"]).resolve(),
         "robot/" + controller.name: controller,
     }
-    for key in ("left_info", "right_info"):
-        path = (controller.parent / ctrl[key]).resolve()
-        files["robot/" + path.name] = path
+    # One task .info per arm (dual_arm) or one for the whole body.
+    for key in ("left_info", "right_info", "info"):
+        if key in ctrl:
+            path = (controller.parent / ctrl[key]).resolve()
+            files["robot/" + path.name] = path
     return files
 
 

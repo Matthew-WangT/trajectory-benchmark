@@ -49,12 +49,17 @@ Ocs2IkControllerConfig LoadOcs2IkControllerConfig(const std::string& yaml_path) 
   ReadIfPresent(node, "policy_max_age_s", config.policy_max_age_s);
   ReadIfPresent(node, "mpc_max_frequency_hz", config.mpc_max_frequency_hz);
   ReadIfPresent(node, "mpc_thread_cpu", config.mpc_thread_cpu);
-  config.left_info = node["left_info"].as<std::string>();
-  config.right_info = node["right_info"].as<std::string>();
+  ReadIfPresent(node, "type", config.type);
+  if (config.type == "dual_arm") {
+    config.left_info = ResolvePath(base_dir, node["left_info"].as<std::string>());
+    config.right_info = ResolvePath(base_dir, node["right_info"].as<std::string>());
+  } else if (config.type == "whole_body") {
+    config.info = ResolvePath(base_dir, node["info"].as<std::string>());
+  } else {
+    LOG(FATAL) << "Unknown IK controller type " << config.type << " in " << yaml_path << ", dual_arm or whole_body";
+  }
 
   config.tmp_working_dir = ResolvePath(base_dir, config.tmp_working_dir);
-  config.left_info = ResolvePath(base_dir, config.left_info);
-  config.right_info = ResolvePath(base_dir, config.right_info);
   std::filesystem::create_directories(config.tmp_working_dir);
   LOG(INFO) << "Loaded the IK controller config " << yaml_path << ", CppAD libraries in " << config.tmp_working_dir;
   return config;

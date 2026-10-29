@@ -96,8 +96,8 @@ class EeTrackingAnalyzer(Analyzer):
         rep, d, model, p, names = ctx.rep, ctx.joints(), ctx.model, ctx.profile, ctx.joint_names
         rep.add("Jacobian 归因 dx = sum_i J_i(q) dq_i, 各轴贡献 RMS [mm] / 能量占比:")
         for arm in p.arms:
-            a, idx = arm.name, p.joint_index(arm)
-            J = model.jac_pos_series(d.q_meas, arm)  # (N,3,7)
+            a, idx = arm.name, p.chain_index(arm)
+            J = model.jac_pos_series(d.q_meas, arm)  # (N,3,J), the torso joints too
             contrib = J * d.dq[:, idx][:, None, :]
             lin_err = rms(contrib.sum(axis=2) - res.err[a], axis=0) * 1e3
             c_rms = rms(contrib, axis=0)  # (3,7)
@@ -143,7 +143,7 @@ class EeTrackingAnalyzer(Analyzer):
         m_band = (f >= o.band_hz[0]) & (f <= o.band_hz[1])
         rep.add(f"频域对照: Welch nperseg {nper} (分辨率 {d.fs / nper:.3f} Hz), 搜索频段 {o.band_hz} Hz")
         for arm in p.arms:
-            a, idx = arm.name, p.joint_index(arm)
+            a, idx = arm.name, p.chain_index(arm)
             psd_ee = np.zeros((3, len(f)))
             f_s, ref_energy = np.zeros(3), np.zeros(3, dtype=bool)
             for x, ax in enumerate(AXES):
@@ -176,7 +176,7 @@ class EeTrackingAnalyzer(Analyzer):
         jr: JointResult = ctx.results["joint"].data
         rep.add("判别表落点:")
         for arm in p.arms:
-            a, idx = arm.name, p.joint_index(arm)
+            a, idx = arm.name, p.chain_index(arm)
             tx = jr.delay.tau_xcorr[idx] * 1e3
             inconsistent = delay_inconsistent(tx)
             worst = int(np.argmax(res.err_rms[a]))
@@ -263,7 +263,7 @@ def fig_attribution(ctx: Context) -> None:
     t, arms, names = ctx.joints().t, ctx.profile.arms, ctx.joint_names
     fig, axes = plt.subplots(4, len(arms), figsize=(9 * len(arms), 14), squeeze=False)
     for c, arm in enumerate(arms):
-        a, idx = arm.name, ctx.profile.joint_index(arm)
+        a, idx = arm.name, ctx.profile.chain_index(arm)
         labels = [names[i] for i in idx]
         x = np.arange(len(idx))
         for row, axis in enumerate("XYZ"):
@@ -300,7 +300,7 @@ def fig_spectrum(ctx: Context) -> None:
     colors = ("tab:red", "tab:green", "tab:blue")
     fig, axes = plt.subplots(3, len(arms), figsize=(9 * len(arms), 11), squeeze=False)
     for c, arm in enumerate(arms):
-        a, idx = arm.name, ctx.profile.joint_index(arm)
+        a, idx = arm.name, ctx.profile.chain_index(arm)
         s = res.spec[a]
         f = s["freq"]
         m = (f > 0) & (f <= max(10.0, band[1]))

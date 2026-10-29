@@ -3,34 +3,36 @@
 #include <deque>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include <Eigen/Core>
 
 #include "replay/config.h"
+#include "replay/joints.h"
 
 namespace replay {
-
-// Joint vector of both arms, the left arm first.
-using DualJoints = Eigen::Matrix<double, 2 * arm::kArmDoF, 1>;
 
 // Per tick checks of the control loop. Any violation aborts the replay.
 class SafetyMonitor {
  public:
-  SafetyMonitor(const SafetyConfig& config, const DualJoints& lower_limit, const DualJoints& upper_limit);
+  // `joint_names` name the joints in the messages.
+  SafetyMonitor(const SafetyConfig& config, const Joints& lower_limit, const Joints& upper_limit,
+                std::vector<std::string> joint_names);
 
   // Resets the per run state, `q_cmd` is the command the run starts from.
-  void Reset(const DualJoints& q_cmd, double t);
+  void Reset(const Joints& q_cmd, double t);
 
   // Returns the reason of a violation at time `t`. `evaluated` is false on ticks without an IK evaluation,
   // `held` tells whether the evaluation held the previous command.
-  std::optional<std::string> Check(double t, const DualJoints& q_cmd, const DualJoints& q_meas, bool feedback_is_new,
+  std::optional<std::string> Check(double t, const Joints& q_cmd, const Joints& q_meas, bool feedback_is_new,
                                    bool evaluated, bool held);
 
  private:
   SafetyConfig config_;
-  DualJoints lower_;
-  DualJoints upper_;
-  DualJoints prev_q_cmd_ = DualJoints::Zero();
+  std::vector<std::string> joint_names_;
+  Joints lower_;
+  Joints upper_;
+  Joints prev_q_cmd_;
   // Time of the last change of the command.
   double prev_t_ = 0.0;
   double last_feedback_t_ = 0.0;
@@ -45,14 +47,14 @@ class CommandDelayMonitor {
   explicit CommandDelayMonitor(double window_s = 0.2) : window_s_(window_s) {}
 
   void Reset() { sent_.clear(); }
-  void AddSent(double t, const DualJoints& q);
+  void AddSent(double t, const Joints& q);
   // Delay of the command received at time `t`, nullopt while the recent commands hardly move.
-  std::optional<double> Estimate(double t, const DualJoints& received) const;
+  std::optional<double> Estimate(double t, const Joints& received) const;
 
  private:
   struct Sent {
     double t;
-    DualJoints q;
+    Joints q;
   };
   double window_s_;
   std::deque<Sent> sent_;

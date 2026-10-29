@@ -59,6 +59,7 @@ struct ManipulatorModelInfo {
   size_t armDim;                              // number of DOFs in the robot arm
   std::string baseFrame;                      // name of the root frame of the robot
   std::string eeFrame;                        // name of the end-effector frame of the robot
+  std::vector<std::string> eeFrames;          // all tracked end-effector frames, eeFrames[0] == eeFrame
   std::vector<std::string> dofNames;          // name of the actuated DOFs in the robot
 };
 

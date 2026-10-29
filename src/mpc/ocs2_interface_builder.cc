@@ -73,8 +73,8 @@ Ocs2InterfaceBundle BuildOcs2Interface(const std::string& urdf_file_path, const 
   ocs2::mobile_manipulator::MobileManipulatorPinocchioMappingCppAd pinocchioMapping(bundle.model_info);
   const auto& pinocchio = bundle.interface->getPinocchioInterface();
   bundle.ee_kinematics = std::make_shared<ocs2::PinocchioEndEffectorKinematicsCppAd>(
-      pinocchio, pinocchioMapping, std::vector<std::string>{bundle.model_info.eeFrame}, bundle.model_info.stateDim,
-      bundle.model_info.inputDim, "end_effector_kinematics");
+      pinocchio, pinocchioMapping, bundle.model_info.eeFrames, bundle.model_info.stateDim, bundle.model_info.inputDim,
+      "end_effector_kinematics");
 
   if (param.joint_reg_enable) {
     bundle.joint_reg_q_ref = std::make_shared<ocs2::vector_t>(bundle.interface->getInitialState());

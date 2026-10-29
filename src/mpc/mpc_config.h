@@ -28,8 +28,12 @@ struct Ocs2IkControllerConfig {
   // CPU core for the MPC solver thread; -1 leaves scheduling to the OS.
   int mpc_thread_cpu = -1;
 
+  // dual_arm: one MPC per arm from left_info / right_info; whole_body: one MPC over all joints from info, its
+  // model_information.eeFrames the left and the right end effector.
+  std::string type = "dual_arm";
   std::string left_info;
   std::string right_info;
+  std::string info;
 };
 
 // Loads the controller yaml. Relative paths in it are resolved against the folder of the yaml file.

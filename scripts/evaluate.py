@@ -27,14 +27,14 @@ from trackeval.analyzers.base import Options  # noqa: E402
 from trackeval.csvio import load_delivery, load_reference  # noqa: E402
 from trackeval.model import ArmModel  # noqa: E402
 from trackeval.report import Report  # noqa: E402
-from trackeval.robots import MARVIN, generic  # noqa: E402
+from trackeval.robots import PROFILES, generic  # noqa: E402
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("path", type=Path, help="delivery CSV, or a Marvin run folder holding delivery.csv")
-    parser.add_argument("--robot", choices=("marvin", "generic"), default=None,
-                        help="profile, marvin for a run folder and generic for a CSV by default")
+    parser.add_argument("--robot", choices=(*PROFILES, "generic"), default=None,
+                        help="profile, the robot of run_info.json for a run folder and generic for a CSV by default")
     parser.add_argument("--reference", type=Path, help="eef_command.csv of the case, sets the end of the window")
     parser.add_argument("--t-start", type=float, default=0.0)
     parser.add_argument("--t-end", type=float, default=None)
@@ -50,11 +50,12 @@ def main() -> int:
     out = args.out or (raw_dir / "report" if raw_dir else csv_path.with_name(csv_path.stem + "_report"))
     out.mkdir(parents=True, exist_ok=True)
 
+    info = json.loads((raw_dir / "run_info.json").read_text()) if raw_dir and (raw_dir / "run_info.json").is_file() \
+        else None
     t_end = args.t_end
     if t_end is None and args.reference:
         t_end = float(load_reference(args.reference).t[-1])
-    if t_end is None and raw_dir and (raw_dir / "run_info.json").is_file():
-        info = json.loads((raw_dir / "run_info.json").read_text())
+    if t_end is None and info:
         t_end = info["s4_start_s"] - info["s3_start_s"]
 
     try:
@@ -62,11 +63,13 @@ def main() -> int:
     except TrackEvalError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
-    robot = args.robot or ("marvin" if raw_dir else "generic")
-    if robot == "marvin":
-        profile = MARVIN
-        if data.n_joints != {"left": 7, "right": 7}:
-            print(f"error: the marvin profile expects 7 joints per arm, the CSV has {data.n_joints}", file=sys.stderr)
+    robot = args.robot or ((info or {}).get("robot", "marvin") if raw_dir else "generic")
+    if robot != "generic":
+        profile = PROFILES[robot]
+        expected = {g.name: len(g.joints) for g in profile.groups}
+        found = {g: n for g, n in data.n_joints.items() if n}
+        if found != expected:
+            print(f"error: the {robot} profile expects the joints {expected}, the CSV has {found}", file=sys.stderr)
             return 1
         model = ArmModel(profile)
     else:

@@ -84,7 +84,7 @@ def main() -> int:
     keep = np.isin(phase, phases[phases.index(args.from_phase):]) if args.from_phase in phases else phase != "S0"
     values, phase = values[keep], phase[keep]
     t = values[:, col["t_s"]]
-    q_arms = values[:, [col[f"{p}_q_cmd_{j}"] for _, p in ARMS for j in range(1, 8)]]
+    q_arms = values[:, [col[f"{g.prefix}_q_cmd_{j}"] for g in profile.groups for j in range(1, len(g.joints) + 1)]]
     paths = {(arm, kind): values[:, [col[f"{p}_{kind}_{f}"] for f in POSE[:3]]]
              for arm, p in ARMS for kind in ("target", "solved")}
 

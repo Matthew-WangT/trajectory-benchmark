@@ -33,13 +33,14 @@ struct Waypoint {
 // Schedule of one run on the run clock, which starts at 0 when the run starts.
 class Timeline {
  public:
-  // `left_fk_pd` / `right_fk_pd` are the TCP poses at q_pd.
-  Timeline(const StartupConfig& config, const CaseTrajectory& traj, const arm::JointVector& left_q0,
-           const arm::JointVector& right_q0, const Eigen::Isometry3d& left_fk_pd, const Eigen::Isometry3d& right_fk_pd);
+  // `q0` is the joint vector the run starts from (torso, left arm, right arm, as StartupConfig::QPd), `left_fk_pd` /
+  // `right_fk_pd` are the TCP poses at q_pd.
+  Timeline(const StartupConfig& config, const CaseTrajectory& traj, const Joints& q0,
+           const Eigen::Isometry3d& left_fk_pd, const Eigen::Isometry3d& right_fk_pd);
 
   Phase PhaseAt(double t) const;
   // S0 joint command at `t`, clamped to the phase.
-  void JointCommand(double t, arm::JointVector& left_q, arm::JointVector& right_q) const;
+  Joints JointCommand(double t) const;
   // Index of the newest waypoint with a time not after `t`, -1 before the first one.
   int LatestWaypoint(double t) const;
 
@@ -51,10 +52,8 @@ class Timeline {
   double end() const { return end_; }
 
  private:
-  arm::JointVector left_q0_;
-  arm::JointVector right_q0_;
-  arm::JointVector left_q_pd_;
-  arm::JointVector right_q_pd_;
+  Joints q0_;
+  Joints q_pd_;
   double s1_start_ = 0.0;
   double s2_start_ = 0.0;
   double s3_start_ = 0.0;
