@@ -10,7 +10,7 @@ from .base import Analyzer, AnalyzerResult, Context
 AXES = "xyz"
 
 
-def _pos_rms_at_lag(t: np.ndarray, cmd: np.ndarray, meas: np.ndarray, lag: float) -> float:
+def pos_rms_at_lag(t: np.ndarray, cmd: np.ndarray, meas: np.ndarray, lag: float) -> float:
     """RMS of |meas(t) - cmd(t - lag)| over the samples where the shifted command exists."""
     ok = t - lag >= t[0]
     shifted = np.column_stack([np.interp(t[ok] - lag, t, cmd[:, k]) for k in range(3)])
@@ -56,7 +56,7 @@ class TcpTrackingAnalyzer(Analyzer):
             rep.metric(f"tcp.{a}.rot_max_deg", rot.max())
 
             # Equivalent delay: the shift of the command that best explains the measurement.
-            curve = np.array([_pos_rms_at_lag(d.t, cmd[:, :3], meas[:, :3], lag) for lag in lags])
+            curve = np.array([pos_rms_at_lag(d.t, cmd[:, :3], meas[:, :3], lag) for lag in lags])
             best = int(np.argmin(curve))
             rep.add(
                 f"        等效时延 {lags[best] * 1e3:.0f} ms (平移命令后 |e| RMS {curve[0] * 1e3:.2f} -> "

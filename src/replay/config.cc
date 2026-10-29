@@ -41,6 +41,14 @@ void ReadJoints(const YAML::Node& node, const char* key, arm::JointVector& value
   value = Eigen::Map<const arm::JointVector>(values.data());
 }
 
+void ReadNames(const YAML::Node& node, const char* key, std::array<std::string, arm::kArmDoF>& value) {
+  const std::vector<std::string> values = node[key].as<std::vector<std::string>>();
+  if (values.size() != arm::kArmDoF) {
+    throw std::runtime_error(std::string(key) + " expects " + std::to_string(arm::kArmDoF) + " names");
+  }
+  std::copy(values.begin(), values.end(), value.begin());
+}
+
 std::string ResolvePath(const std::filesystem::path& base_dir, const std::string& path) {
   if (path.empty() || std::filesystem::path(path).is_absolute()) {
     return path;
@@ -50,10 +58,58 @@ std::string ResolvePath(const std::filesystem::path& base_dir, const std::string
 
 }  // namespace
 
+RobotModelConfig LoadRobotModelConfig(const std::string& robot_dir) {
+  const std::filesystem::path base_dir = std::filesystem::weakly_canonical(robot_dir);
+  const YAML::Node root = YAML::LoadFile((base_dir / "robot.yaml").string());
+  RobotModelConfig config;
+  config.dir = base_dir.string();
+  config.name = root["name"] ? root["name"].as<std::string>() : base_dir.filename().string();
+  config.urdf = ResolvePath(base_dir, root["urdf"].as<std::string>());
+  config.controller_yaml = ResolvePath(base_dir, root["controller"].as<std::string>());
+  ReadNames(root["joints"], "left", config.left_joints);
+  ReadNames(root["joints"], "right", config.right_joints);
+
+  const YAML::Node ik = root["ik"];
+  ReadIfPresent(ik, "evaluate_every_ticks", config.evaluate_every_ticks);
+  ReadIfPresent(ik, "send_every_ticks", config.send_every_ticks);
+  if (ik && ik["reference_mode"]) {
+    const std::string mode = ik["reference_mode"].as<std::string>();
+    if (mode == "lookahead") {
+      config.reference_mode = ReferenceMode::kLookahead;
+    } else if (mode == "latest") {
+      config.reference_mode = ReferenceMode::kLatest;
+    } else {
+      throw std::runtime_error("ik.reference_mode must be lookahead or latest, got " + mode);
+    }
+  }
+  ReadIfPresent(ik, "reference_window_s", config.reference_window_s);
+  ReadIfPresent(ik, "reference_lead_s", config.reference_lead_s);
+  ReadIfPresent(ik, "warm_up_s", config.mpc_warm_up_s);
+
+  const YAML::Node startup = root["startup"];
+  ReadJoints(startup["q_pd"], "left", config.startup.left_q_pd);
+  ReadJoints(startup["q_pd"], "right", config.startup.right_q_pd);
+  ReadIfPresent(startup, "joint_speed_rad_s", config.startup.joint_speed_rad_s);
+  ReadIfPresent(startup, "joint_min_duration_s", config.startup.joint_min_duration_s);
+  ReadIfPresent(startup, "eef_linear_speed_m_s", config.startup.eef_linear_speed_m_s);
+  ReadIfPresent(startup, "eef_angular_speed_rad_s", config.startup.eef_angular_speed_rad_s);
+  ReadIfPresent(startup, "eef_min_duration_s", config.startup.eef_min_duration_s);
+  ReadIfPresent(startup, "eef_waypoint_rate_hz", config.startup.eef_waypoint_rate_hz);
+  ReadIfPresent(startup, "hold_s", config.startup.hold_s);
+  ReadIfPresent(startup, "end_hold_s", config.startup.end_hold_s);
+
+  const YAML::Node solve = root["solve"];
+  ReadIfPresent(solve, "rt_cpu", config.solve.rt_cpu);
+  ReadIfPresent(solve, "rt_priority", config.solve.rt_priority);
+  ReadIfPresent(solve, "max_consecutive_holds", config.solve.max_consecutive_holds);
+  return config;
+}
+
 ReplayConfig LoadReplayConfig(const std::string& yaml_path) {
   const YAML::Node root = YAML::LoadFile(yaml_path);
   const std::filesystem::path base_dir = std::filesystem::absolute(yaml_path).parent_path();
   ReplayConfig config;
+  config.model = LoadRobotModelConfig(ResolvePath(base_dir, root["robot_dir"].as<std::string>()));
 
   const YAML::Node robot = root["robot"];
   ReadIfPresent(robot, "ip", config.robot.ip);
@@ -71,8 +127,6 @@ ReplayConfig LoadReplayConfig(const std::string& yaml_path) {
   ReadIfPresent(control, "acc_ratio", config.robot.control.acc_ratio);
   ReadIfPresent(control, "enable_vel_feedforward", config.robot.control.enable_vel_feedforward);
   ReadIfPresent(control, "vel_feedforward_step_ms", config.robot.control.vel_feedforward_step_ms);
-  ReadIfPresent(control, "evaluate_every_ticks", config.evaluate_every_ticks);
-  ReadIfPresent(control, "send_every_ticks", config.send_every_ticks);
 
   const YAML::Node tool = root["tool"];
   if (tool) {
@@ -81,35 +135,6 @@ ReplayConfig LoadReplayConfig(const std::string& yaml_path) {
     ReadArray(tool["right"], "kine", config.robot.right_tool.kine);
     ReadArray(tool["right"], "dyn", config.robot.right_tool.dyn);
   }
-
-  const YAML::Node mpc = root["mpc"];
-  config.controller_yaml = ResolvePath(base_dir, mpc["controller"].as<std::string>());
-  config.urdf = ResolvePath(base_dir, mpc["urdf"].as<std::string>());
-  if (mpc["reference_mode"]) {
-    const std::string mode = mpc["reference_mode"].as<std::string>();
-    if (mode == "lookahead") {
-      config.reference_mode = ReferenceMode::kLookahead;
-    } else if (mode == "latest") {
-      config.reference_mode = ReferenceMode::kLatest;
-    } else {
-      throw std::runtime_error("mpc.reference_mode must be lookahead or latest, got " + mode);
-    }
-  }
-  ReadIfPresent(mpc, "reference_window_s", config.reference_window_s);
-  ReadIfPresent(mpc, "reference_lead_s", config.reference_lead_s);
-  ReadIfPresent(mpc, "warm_up_s", config.mpc_warm_up_s);
-
-  const YAML::Node startup = root["startup"];
-  ReadJoints(startup["q_pd"], "left", config.startup.left_q_pd);
-  ReadJoints(startup["q_pd"], "right", config.startup.right_q_pd);
-  ReadIfPresent(startup, "joint_speed_rad_s", config.startup.joint_speed_rad_s);
-  ReadIfPresent(startup, "joint_min_duration_s", config.startup.joint_min_duration_s);
-  ReadIfPresent(startup, "eef_linear_speed_m_s", config.startup.eef_linear_speed_m_s);
-  ReadIfPresent(startup, "eef_angular_speed_rad_s", config.startup.eef_angular_speed_rad_s);
-  ReadIfPresent(startup, "eef_min_duration_s", config.startup.eef_min_duration_s);
-  ReadIfPresent(startup, "eef_waypoint_rate_hz", config.startup.eef_waypoint_rate_hz);
-  ReadIfPresent(startup, "hold_s", config.startup.hold_s);
-  ReadIfPresent(startup, "end_hold_s", config.startup.end_hold_s);
 
   const YAML::Node safety = root["safety"];
   ReadIfPresent(safety, "max_joint_track_err_rad", config.safety.max_joint_track_err_rad);
@@ -121,7 +146,6 @@ ReplayConfig LoadReplayConfig(const std::string& yaml_path) {
   ReadIfPresent(safety, "max_command_delay_frames", config.safety.max_command_delay_frames);
   ReadIfPresent(safety, "max_initial_deviation_rad", config.safety.max_initial_deviation_rad);
   ReadIfPresent(safety, "min_tcp_distance_m", config.safety.min_tcp_distance_m);
-  ReadIfPresent(safety, "max_feedforward_joint_vel_deg_s", config.safety.max_feedforward_joint_vel_deg_s);
 
   ReadIfPresent(root["dry_run"], "time_constant_s", config.dry_run_time_constant_s);
   return config;

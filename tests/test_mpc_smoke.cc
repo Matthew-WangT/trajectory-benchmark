@@ -16,12 +16,12 @@ namespace {
 // 10 mm / 1.5 deg on the right arm from q_pd. The bounds below catch a broken port, not that offset.
 TEST(MpcSmokeTest, ConvergesToAStaticTarget) {
   const std::string source_dir = BENCHMARK_SOURCE_DIR;
-  const replay::ReplayConfig replay_config = replay::LoadReplayConfig(source_dir + "/config/marvin.yaml");
-  const Ocs2IkControllerConfig config = LoadOcs2IkControllerConfig(replay_config.controller_yaml);
-  DualArmOcs2IkController controller(replay_config.urdf, config);
+  const replay::RobotModelConfig robot = replay::LoadRobotModelConfig(source_dir + "/robots/marvin");
+  const Ocs2IkControllerConfig config = LoadOcs2IkControllerConfig(robot.controller_yaml);
+  DualArmOcs2IkController controller(robot.urdf, config);
 
   Eigen::VectorXd q(2 * DualArmOcs2IkController::kArmDoF);
-  q << replay_config.startup.left_q_pd, replay_config.startup.right_q_pd;
+  q << robot.startup.left_q_pd, robot.startup.right_q_pd;
   Eigen::Isometry3d left_target, right_target;
   controller.GetEePoses(q, left_target, right_target);
   left_target.translation() += Eigen::Vector3d(0.05, 0.0, 0.0);

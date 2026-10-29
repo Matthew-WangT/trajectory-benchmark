@@ -22,7 +22,8 @@ bool FakeArm::Send(const JointVector& left_q, const JointVector& right_q) {
 }
 
 void FakeArm::Integrate(ArmFeedback& arm, const JointVector& cmd, double dt) const {
-  const double alpha = 1.0 - std::exp(-dt / time_constant_s_);
+  // A zero time constant is the ideal robot of the trajectory solve, the measurement is the command.
+  const double alpha = time_constant_s_ > 0.0 ? 1.0 - std::exp(-dt / time_constant_s_) : 1.0;
   const JointVector q_next = arm.q + alpha * (cmd - arm.q);
   arm.dq = (q_next - arm.q) / dt;
   arm.q = q_next;

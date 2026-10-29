@@ -62,8 +62,7 @@ TEST(TimelineTest, JointMoveIsContinuous) {
   const StartupConfig config = MakeConfig();
   const arm::JointVector left_q0 = arm::JointVector::Zero();
   const arm::JointVector right_q0 = arm::JointVector::Zero();
-  const Timeline timeline(config, MakeCase(), left_q0, right_q0, Pose(0.5, 0.3, 0.7, 0.0),
-                          Pose(0.5, -0.3, 0.7, 0.0));
+  const Timeline timeline(config, MakeCase(), left_q0, right_q0, Pose(0.5, 0.3, 0.7, 0.0), Pose(0.5, -0.3, 0.7, 0.0));
   arm::JointVector left_q, right_q;
   timeline.JointCommand(0.0, left_q, right_q);
   EXPECT_TRUE(left_q.isApprox(left_q0));
@@ -73,6 +72,20 @@ TEST(TimelineTest, JointMoveIsContinuous) {
   // Holds beyond the phase.
   timeline.JointCommand(timeline.s1_start() + 10.0, left_q, right_q);
   EXPECT_TRUE(left_q.isApprox(config.left_q_pd));
+}
+
+TEST(TimelineTest, StartsWithS1WithoutS0) {
+  // The solve starts at q_pd with no S0 minimum duration, so the run opens with the TCP move.
+  StartupConfig config = MakeConfig();
+  config.joint_min_duration_s = 0.0;
+  const Timeline timeline(config, MakeCase(), config.left_q_pd, config.right_q_pd, Pose(0.5, 0.3, 0.7, 0.0),
+                          Pose(0.5, -0.3, 0.7, 0.0));
+  EXPECT_DOUBLE_EQ(timeline.s1_start(), 0.0);
+  EXPECT_EQ(timeline.PhaseAt(0.0), Phase::kS1EefMove);
+  arm::JointVector left_q, right_q;
+  timeline.JointCommand(0.0, left_q, right_q);
+  EXPECT_TRUE(left_q.isApprox(config.left_q_pd));
+  EXPECT_TRUE(right_q.isApprox(config.right_q_pd));
 }
 
 TEST(TimelineTest, WaypointsAreCausalAndConnected) {

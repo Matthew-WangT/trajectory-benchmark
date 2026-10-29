@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+ROBOTS_DIR = REPO_ROOT / "robots"
 
 
 @dataclass(frozen=True)
@@ -22,6 +24,8 @@ class RobotProfile:
     urdf: Path | None
     arms: tuple[ArmSpec, ...]
     joint_order: tuple[str, ...]  # both arms side by side, the left arm first
+    robot_dir: Path | None = None  # robots/<name>/, None for a profile without one
+    max_acc: tuple[float, ...] | None = None  # rad/s^2 per joint of joint_order, the URDF has none
 
     def arm(self, name: str) -> ArmSpec:
         for a in self.arms:
@@ -33,20 +37,33 @@ class RobotProfile:
         return [self.joint_order.index(j) for j in arm.joints]
 
 
-def _dual_arm(name: str, urdf: Path | None, left_joints, right_joints, ee_l=None, ee_r=None) -> RobotProfile:
+def _dual_arm(name: str, urdf: Path | None, left_joints, right_joints, ee_l=None, ee_r=None, **extra) -> RobotProfile:
     left = ArmSpec("left", "l", tuple(left_joints), ee_l)
     right = ArmSpec("right", "r", tuple(right_joints), ee_r)
-    return RobotProfile(name=name, urdf=urdf, arms=(left, right), joint_order=left.joints + right.joints)
+    return RobotProfile(name=name, urdf=urdf, arms=(left, right), joint_order=left.joints + right.joints, **extra)
 
 
-MARVIN = _dual_arm(
-    "marvin",
-    REPO_ROOT / "assets/urdf/serial_marvin_with_gripper.urdf",
-    (f"Joint{i}_L" for i in range(1, 8)),
-    (f"Joint{i}_R" for i in range(1, 8)),
-    "left_gripper_f90c_end_effector_link",
-    "right_gripper_f90c_end_effector_link",
-)
+def read_yaml(path: Path) -> dict:
+    from ruamel.yaml import YAML
+
+    return YAML(typ="safe").load(path.read_text())
+
+
+def load_profile(robot_dir: Path) -> RobotProfile:
+    """Profile of robots/<name>/robot.yaml, the paths in it relative to that folder."""
+    robot_dir = Path(robot_dir).resolve()
+    cfg = read_yaml(robot_dir / "robot.yaml")
+    max_acc = cfg.get("max_acc_deg_s2")
+    return _dual_arm(
+        cfg.get("name", robot_dir.name),
+        (robot_dir / cfg["urdf"]).resolve(),
+        cfg["joints"]["left"],
+        cfg["joints"]["right"],
+        cfg["ee_frames"]["left"],
+        cfg["ee_frames"]["right"],
+        robot_dir=robot_dir,
+        max_acc=tuple(math.radians(v) for v in max_acc["left"] + max_acc["right"]) if max_acc else None,
+    )
 
 
 def generic(n_left: int, n_right: int) -> RobotProfile:
@@ -56,4 +73,6 @@ def generic(n_left: int, n_right: int) -> RobotProfile:
     )
 
 
-PROFILES = {"marvin": MARVIN}
+# The robots of robots/*/robot.yaml by name.
+PROFILES = {p.name: p for p in (load_profile(d.parent) for d in sorted(ROBOTS_DIR.glob("*/robot.yaml")))}
+MARVIN = PROFILES["marvin"]

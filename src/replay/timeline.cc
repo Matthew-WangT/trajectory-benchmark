@@ -97,7 +97,8 @@ Phase Timeline::PhaseAt(double t) const {
 
 void Timeline::JointCommand(double t, arm::JointVector& left_q, arm::JointVector& right_q) const {
   // The quintic with zero boundary velocity and acceleration is the minimum jerk profile.
-  const double s = MinJerk(t / s1_start_);
+  // Without an S0 (the solve starts at q_pd) the command is q_pd.
+  const double s = s1_start_ > 0.0 ? MinJerk(t / s1_start_) : 1.0;
   left_q = left_q0_ + s * (left_q_pd_ - left_q0_);
   right_q = right_q0_ + s * (right_q_pd_ - right_q0_);
 }

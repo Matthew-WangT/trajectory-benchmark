@@ -1,11 +1,15 @@
 // Replays a benchmark case on the Marvin dual arms in the joint impedance mode, the TCP commands going through the
 // receding-horizon OCS2 IK controller, and records the robot feedback.
 //
+//   replay --solve --robot robots/marvin --case data/case02_fold_clothes_spd50
 //   replay --config config/marvin.yaml --case data/case02_fold_clothes_spd50 --dry-run
-//   replay --config config/marvin.yaml --case data/case02_fold_clothes_spd50 --runs 3
+//   replay --config config/marvin.yaml --case data/case02_fold_clothes_spd50 --runs 3 --solve-result METRICS_JSON
 //
 // Each run: S0 joint move to q_pd, S1 TCP move to the start pose, S2 hold, S3 the trajectory, S4 hold. The loop runs
 // every 1 ms: read the feedback, evaluate the IK controller every `evaluate_every_ticks` ticks, check, send.
+// The trajectory solve (--solve) runs the same loop from q_pd (S0 holds there) against an ideal robot
+// (q_meas = q_cmd), records the commands and does not abort on the safety checks; scripts/analyze_solve.py evaluates
+// it.
 // Pinocchio raises the Boost MPL limits, it has to come before any Boost header (here the OCS2 LoadData.h).
 #include <pinocchio/fwd.hpp>
 
@@ -55,9 +59,15 @@ void OnSignal(int /*signal*/) { g_interrupted = true; }
 
 struct Args {
   std::string config;
+  // Robot folder of the trajectory solve, the replay takes it from the config.
+  std::string robot;
   std::string case_dir;
-  int runs = 3;
+  // 0 is the default: 1 for the solve, 3 otherwise.
+  int runs = 0;
   bool dry_run = false;
+  bool solve = false;
+  // metrics.json of the trajectory solve of the case, checked before a real run.
+  std::string solve_result;
   std::string out;
   // "connect" stops after the connection checks, "S0" after the joint move to q_pd and a hold, "S2" before the
   // trajectory (S3), so that only the slow moves run.
@@ -70,7 +80,8 @@ struct Args {
 void PrintUsage() {
   std::fprintf(stderr,
                "usage: replay --config CONFIG --case CASE_DIR [--runs N] [--dry-run] [--out DIR]\n"
-               "              [--stop-after connect|S0|S2] [--skip-vel-check]\n"
+               "              [--stop-after connect|S0|S2] [--solve-result METRICS_JSON | --skip-vel-check]\n"
+               "       replay --solve --robot ROBOT_DIR --case CASE_DIR [--runs N] [--out DIR]\n"
                "       replay --config CONFIG --show-config\n");
 }
 
@@ -92,6 +103,12 @@ std::optional<Args> ParseArgs(int argc, char** argv) {
       args.runs = std::stoi(next());
     } else if (arg == "--dry-run") {
       args.dry_run = true;
+    } else if (arg == "--solve") {
+      args.solve = true;
+    } else if (arg == "--robot") {
+      args.robot = next();
+    } else if (arg == "--solve-result") {
+      args.solve_result = next();
     } else if (arg == "--out") {
       args.out = next();
     } else if (arg == "--stop-after") {
@@ -104,7 +121,13 @@ std::optional<Args> ParseArgs(int argc, char** argv) {
       return std::nullopt;
     }
   }
-  if (args.config.empty() || (args.case_dir.empty() && !args.show_config) || args.runs < 1 ||
+  if (args.runs == 0) {
+    args.runs = args.solve ? 1 : 3;
+  }
+  const bool solve_ok = args.robot.empty() || (args.solve && args.config.empty() && !args.dry_run &&
+                                               args.stop_after.empty() && !args.show_config);
+  if ((args.solve ? args.robot.empty() : args.config.empty()) || !solve_ok ||
+      (args.case_dir.empty() && !args.show_config) || args.runs < 1 ||
       !(args.stop_after.empty() || args.stop_after == "connect" || args.stop_after == "S0" ||
         args.stop_after == "S2")) {
     return std::nullopt;
@@ -135,13 +158,13 @@ Eigen::Matrix<double, 7, 1> PoseVector(const Eigen::Isometry3d& pose) {
   return v;
 }
 
-void LoadJointLimits(const std::string& urdf_path, DualJoints& lower, DualJoints& upper) {
-  const urdf::ModelInterfaceSharedPtr model = urdf::parseURDFFile(urdf_path);
-  CHECK(model) << "Cannot parse " << urdf_path;
+void LoadJointLimits(const RobotModelConfig& robot, DualJoints& lower, DualJoints& upper) {
+  const urdf::ModelInterfaceSharedPtr model = urdf::parseURDFFile(robot.urdf);
+  CHECK(model) << "Cannot parse " << robot.urdf;
   for (int i = 0; i < 2 * kDoF; ++i) {
-    const std::string name = "Joint" + std::to_string(i % kDoF + 1) + (i < kDoF ? "_L" : "_R");
+    const std::string& name = i < kDoF ? robot.left_joints[i] : robot.right_joints[i - kDoF];
     const urdf::JointConstSharedPtr joint = model->getJoint(name);
-    CHECK(joint && joint->limits) << "Joint " << name << " without limits in " << urdf_path;
+    CHECK(joint && joint->limits) << "Joint " << name << " without limits in " << robot.urdf;
     lower[i] = joint->limits->lower;
     upper[i] = joint->limits->upper;
   }
@@ -197,10 +220,11 @@ class Replayer {
         controller_(controller),
         robot_(robot),
         horizon_s_(horizon_s),
-        reference_lead_s_(config.reference_lead_s > 0.0 ? config.reference_lead_s : horizon_s),
-        reference_window_s_(config.reference_window_s > 0.0 ? config.reference_window_s : horizon_s),
+        reference_lead_s_(config.model.reference_lead_s > 0.0 ? config.model.reference_lead_s : horizon_s),
+        reference_window_s_(config.model.reference_window_s > 0.0 ? config.model.reference_window_s : horizon_s),
         safety_(config.safety, lower, upper) {
-    controller_.GetEePoses(Join(config.startup.left_q_pd, config.startup.right_q_pd), left_fk_pd_, right_fk_pd_);
+    controller_.GetEePoses(Join(config.model.startup.left_q_pd, config.model.startup.right_q_pd), left_fk_pd_,
+                           right_fk_pd_);
   }
 
   RunResult Run(const std::filesystem::path& run_dir) {
@@ -212,9 +236,9 @@ class Replayer {
       return result;
     }
     const DualJoints q0 = Join(feedback.left.q, feedback.right.q);
-    const Timeline timeline(config_.startup, traj_, feedback.left.q, feedback.right.q, left_fk_pd_, right_fk_pd_);
+    const Timeline timeline(config_.model.startup, traj_, feedback.left.q, feedback.right.q, left_fk_pd_, right_fk_pd_);
     const bool stop_after_s0 = args_.stop_after == "S0";
-    const double end = stop_after_s0                ? timeline.s1_start() + config_.startup.hold_s
+    const double end = stop_after_s0                ? timeline.s1_start() + config_.model.startup.hold_s
                        : args_.stop_after == "S2"   ? timeline.s3_start()
                                                     : timeline.end();
     Recorder recorder(end);
@@ -225,6 +249,7 @@ class Replayer {
     safety_.Reset(q_cmd, 0.0);
     CommandDelayMonitor command_delay;
     int late_frames = 0;
+    int consecutive_holds = 0;
     bool controller_reset = false;
     int last_waypoint = -1;
     int last_window_end = -1;
@@ -260,7 +285,7 @@ class Replayer {
       if (feedback.is_new) {
         recorder.Add(FeedbackRecord{t, feedback});
       }
-      if (feedback.is_new) {
+      if (feedback.is_new && !args_.solve) {
         const auto delay =
             command_delay.Estimate(t, Join(feedback.left.q_cmd_received, feedback.right.q_cmd_received));
         if (delay) {
@@ -278,7 +303,7 @@ class Replayer {
       }
 
       const Phase phase = timeline.PhaseAt(t);
-      const bool evaluate_tick = tick % config_.evaluate_every_ticks == 0;
+      const bool evaluate_tick = tick % config_.model.evaluate_every_ticks == 0;
       bool evaluated = false;
       bool held = false;
       int waypoint = -1;
@@ -294,8 +319,9 @@ class Replayer {
         }
         waypoint = timeline.LatestWaypoint(t);
         // The reference only changes when a waypoint arrives or, with a lookahead, enters the window.
-        const int window_end =
-            config_.reference_mode == ReferenceMode::kLookahead ? timeline.LatestWaypoint(t + reference_window_s_) : -1;
+        const int window_end = config_.model.reference_mode == ReferenceMode::kLookahead
+                                   ? timeline.LatestWaypoint(t + reference_window_s_)
+                                   : -1;
         if (waypoint >= 0 && (waypoint != last_waypoint || window_end != last_window_end)) {
           left_target = timeline.waypoints()[waypoint].left;
           right_target = timeline.waypoints()[waypoint].right;
@@ -329,12 +355,29 @@ class Replayer {
         recorder.Add(record);
       }
 
-      const DualJoints q_meas = Join(feedback.left.q, feedback.right.q);
-      if (const auto violation = safety_.Check(t, q_cmd, q_meas, feedback.is_new, evaluated, held)) {
-        result = Abort(result, *violation);
-        break;
+      if (args_.solve) {
+        // The solve records instead of aborting, scripts/analyze_solve.py counts the violations. It only stops where
+        // it cannot go on.
+        if (evaluated) {
+          consecutive_holds = held ? consecutive_holds + 1 : 0;
+        }
+        if (!q_cmd.allFinite()) {
+          result = Abort(result, "joint command is not finite");
+          break;
+        }
+        if (consecutive_holds > config_.model.solve.max_consecutive_holds) {
+          result =
+              Abort(result, "IK controller held for " + std::to_string(consecutive_holds) + " consecutive evaluations");
+          break;
+        }
+      } else {
+        const DualJoints q_meas = Join(feedback.left.q, feedback.right.q);
+        if (const auto violation = safety_.Check(t, q_cmd, q_meas, feedback.is_new, evaluated, held)) {
+          result = Abort(result, *violation);
+          break;
+        }
       }
-      if (tick % config_.send_every_ticks == 0) {
+      if (tick % config_.model.send_every_ticks == 0) {
         if (!robot_.Send(q_cmd.head<kDoF>(), q_cmd.tail<kDoF>())) {
           result = Abort(result, "send: " + robot_.last_error());
           break;
@@ -349,10 +392,6 @@ class Replayer {
     }
     recorder.Write(run_dir.string());
     WriteRunInfo(run_dir, timeline, q0, result, stop_after_s0);
-    if (!args_.dry_run || !result.ok) {
-      return result;
-    }
-    UpdateVelocityStats(recorder);
     return result;
   }
 
@@ -372,7 +411,7 @@ class Replayer {
       right.push_back(waypoints[i].right);
     }
     if (times.size() == 1) {
-      const double lead = config_.reference_mode == ReferenceMode::kLookahead ? horizon_s_ : reference_lead_s_;
+      const double lead = config_.model.reference_mode == ReferenceMode::kLookahead ? horizon_s_ : reference_lead_s_;
       times.push_back(now + lead);
       left.push_back(waypoints[latest].left);
       right.push_back(waypoints[latest].right);
@@ -395,9 +434,6 @@ class Replayer {
       std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
   }
-
-  // Largest |dq_cmd| per joint in deg/s over the IK controlled phases of the dry runs.
-  const DualJoints& max_cmd_vel_deg_s() const { return max_cmd_vel_deg_s_; }
 
  private:
   RunResult Abort(RunResult result, const std::string& reason) {
@@ -422,21 +458,6 @@ class Replayer {
     return false;
   }
 
-  void UpdateVelocityStats(const Recorder& recorder) {
-    const std::vector<CmdRecord>& cmd = recorder.cmd();
-    for (size_t i = 1; i < cmd.size(); ++i) {
-      if (!cmd[i].evaluated || !cmd[i - 1].evaluated) {
-        continue;
-      }
-      const double dt = cmd[i].t - cmd[i - 1].t;
-      if (dt <= 0.0) {
-        continue;
-      }
-      const DualJoints velocity = (cmd[i].q_cmd - cmd[i - 1].q_cmd).cwiseAbs() / dt * kRadToDeg;
-      max_cmd_vel_deg_s_ = max_cmd_vel_deg_s_.cwiseMax(velocity);
-    }
-  }
-
   void WriteRunInfo(const std::filesystem::path& run_dir, const Timeline& timeline, const DualJoints& q0,
                     const RunResult& result, bool stop_after_s0) const {
     std::FILE* file = std::fopen((run_dir / "run_info.json").c_str(), "w");
@@ -444,10 +465,14 @@ class Replayer {
       LOG(ERROR) << "Cannot write run_info.json in " << run_dir;
       return;
     }
-    std::fprintf(file, "{\n  \"case\": \"%s\",\n  \"dry_run\": %s,\n  \"stop_after_s0\": %s,\n", traj_.name.c_str(),
-                 args_.dry_run ? "true" : "false", stop_after_s0 ? "true" : "false");
-    std::fprintf(file, "  \"status\": \"%s\",\n  \"reason\": \"%s\",\n", result.ok ? "ok" : "aborted",
-                 result.reason.c_str());
+    const char* mode = args_.solve ? "solve" : args_.dry_run ? "dry" : "real";
+    std::fprintf(file,
+                 "{\n  \"case\": \"%s\",\n  \"robot\": \"%s\",\n  \"mode\": \"%s\",\n  \"dry_run\": %s,\n"
+                 "  \"stop_after_s0\": %s,\n",
+                 traj_.name.c_str(), config_.model.name.c_str(), mode, args_.dry_run ? "true" : "false",
+                 stop_after_s0 ? "true" : "false");
+    std::fprintf(file, "  \"status\": \"%s\",\n  \"reason\": \"%s\",\n",
+                 result.ok ? "ok" : args_.solve ? "failed" : "aborted", result.reason.c_str());
     std::fprintf(file,
                  "  \"s1_start_s\": %.6f,\n  \"s2_start_s\": %.6f,\n  \"s3_start_s\": %.6f,\n  \"s4_start_s\": %.6f,\n"
                  "  \"end_s\": %.6f,\n",
@@ -455,15 +480,15 @@ class Replayer {
     std::fprintf(file,
                  "  \"tick_s\": %.6f,\n  \"evaluate_every_ticks\": %d,\n  \"horizon_s\": %.6f,\n"
                  "  \"reference_mode\": \"%s\",\n  \"reference_window_s\": %.6f,\n  \"reference_lead_s\": %.6f,\n",
-                 kTickS, config_.evaluate_every_ticks, horizon_s_,
-                 config_.reference_mode == ReferenceMode::kLookahead ? "lookahead" : "latest", reference_window_s_,
+                 kTickS, config_.model.evaluate_every_ticks, horizon_s_,
+                 config_.model.reference_mode == ReferenceMode::kLookahead ? "lookahead" : "latest", reference_window_s_,
                  reference_lead_s_);
     std::fprintf(file,
                  "  \"loop_overruns\": %d,\n  \"loop_max_lateness_s\": %.6f,\n  \"send_every_ticks\": %d,\n"
                  "  \"max_command_delay_s\": %.4f,\n",
-                 result.overruns, result.max_lateness_s, config_.send_every_ticks, result.max_command_delay_s);
+                 result.overruns, result.max_lateness_s, config_.model.send_every_ticks, result.max_command_delay_s);
     WriteVector(file, "q_start", q0);
-    WriteVector(file, "q_pd", Join(config_.startup.left_q_pd, config_.startup.right_q_pd), true);
+    WriteVector(file, "q_pd", Join(config_.model.startup.left_q_pd, config_.model.startup.right_q_pd), true);
     std::fprintf(file, "}\n");
     std::fclose(file);
   }
@@ -479,34 +504,30 @@ class Replayer {
   SafetyMonitor safety_;
   Eigen::Isometry3d left_fk_pd_;
   Eigen::Isometry3d right_fk_pd_;
-  DualJoints max_cmd_vel_deg_s_ = DualJoints::Zero();
 };
 
-void WriteVelocityCheck(const std::filesystem::path& path, const DualJoints& max_deg_s, double limit) {
-  std::FILE* file = std::fopen(path.c_str(), "w");
-  CHECK(file != nullptr) << "Cannot write " << path;
-  std::fprintf(file, "{\n");
-  WriteVector(file, "max_cmd_joint_vel_deg_s", max_deg_s);
-  std::fprintf(file, "  \"limit_deg_s\": %.3f,\n  \"pass\": %s\n}\n", limit,
-               max_deg_s.maxCoeff() < limit ? "true" : "false");
-  std::fclose(file);
-}
-
-// Checks the dry run velocity of the case before driving the real robot.
-bool CheckDryRunVelocity(const std::filesystem::path& path, double limit) {
-  if (!std::filesystem::exists(path)) {
-    LOG(ERROR) << "Missing " << path << ", run the case with --dry-run first (or pass --skip-vel-check)";
+// Checks the trajectory solve of the case before driving the real robot: scripts/analyze_solve.py writes the
+// precheck into its metrics.json, scripts/benchmark.py picks the latest one whose inputs match the current files.
+bool CheckSolveResult(const std::filesystem::path& path, const std::string& case_name, const std::string& robot) {
+  if (path.empty() || !std::filesystem::exists(path)) {
+    LOG(ERROR) << "Missing the trajectory solve result " << path << ", pass --solve-result with the metrics.json of a "
+               << "solve of the case (./benchmark.sh does it), or --skip-vel-check";
     return false;
   }
   const YAML::Node node = YAML::LoadFile(path.string());
-  const std::vector<double> values = node["max_cmd_joint_vel_deg_s"].as<std::vector<double>>();
-  const double max_value = *std::max_element(values.begin(), values.end());
-  if (max_value >= limit) {
-    LOG(ERROR) << "Dry run joint command velocity reaches " << max_value << " deg/s, the PD velocity feedforward "
-               << "needs it below " << limit << " deg/s";
+  if (node["case"].as<std::string>() != case_name || node["robot"].as<std::string>() != robot) {
+    LOG(ERROR) << path << " is the solve of " << node["case"].as<std::string>() << " on "
+               << node["robot"].as<std::string>() << ", not of " << case_name << " on " << robot;
     return false;
   }
-  LOG(INFO) << "Dry run joint command velocity peaks at " << max_value << " deg/s, below " << limit << " deg/s";
+  const YAML::Node precheck = node["precheck"];
+  if (node["status"].as<std::string>() != "ok" || !precheck["pass"].as<bool>()) {
+    LOG(ERROR) << "Trajectory solve " << path
+               << " does not pass the precheck: " << precheck["reason"].as<std::string>();
+    return false;
+  }
+  LOG(INFO) << "Trajectory solve joint velocity peaks at " << precheck["max_joint_vel_deg_s"].as<double>()
+            << " deg/s, below " << precheck["limit_deg_s"].as<double>() << " deg/s, no joint limit violation";
   return true;
 }
 
@@ -528,22 +549,35 @@ void ShowConfig(const ReplayConfig& config) {
   std::printf("damping right        %s\n", Format(control.right.damping).c_str());
   std::printf("velocity feedforward %s, step %d ms; send every %d ms, IK every %d ms\n",
               control.enable_vel_feedforward ? "on" : "off", control.vel_feedforward_step_ms,
-              config.send_every_ticks, config.evaluate_every_ticks);
+              config.model.send_every_ticks, config.model.evaluate_every_ticks);
   std::printf("tool dyn             left %s, right %s\n", loaded(config.robot.left_tool) ? "set" : "zeros (no load)",
               loaded(config.robot.right_tool) ? "set" : "zeros (no load)");
   std::printf("IK reference         %s\n",
-              config.reference_mode == ReferenceMode::kLookahead ? "lookahead (trajectory chunk)" : "latest waypoint");
+              config.model.reference_mode == ReferenceMode::kLookahead ? "lookahead (trajectory chunk)" : "latest waypoint");
+}
+
+// Config of the solve: the robot folder alone and an ideal robot. Starting at q_pd, S0 is a hold of
+// startup.joint_min_duration_s as at the end of a replay S0, which lets the policy of the warm-up expire before S1
+// (right after the warm-up its policy, solved from a state the default_q regularization moved off q_pd, makes the
+// first S1 command jump).
+ReplayConfig SolveConfigOf(const std::string& robot_dir) {
+  ReplayConfig config;
+  config.model = LoadRobotModelConfig(robot_dir);
+  config.rt_cpu = config.model.solve.rt_cpu;
+  config.rt_priority = config.model.solve.rt_priority;
+  config.dry_run_time_constant_s = 0.0;
+  return config;
 }
 
 int Main(const Args& args) {
-  const ReplayConfig config = LoadReplayConfig(args.config);
+  const ReplayConfig config = args.solve ? SolveConfigOf(args.robot) : LoadReplayConfig(args.config);
   if (args.show_config) {
     ShowConfig(config);
     return 0;
   }
   const CaseTrajectory traj = LoadCase(args.case_dir);
   const double min_distance = traj.MinTcpDistance();
-  if (min_distance < config.safety.min_tcp_distance_m) {
+  if (!args.solve && min_distance < config.safety.min_tcp_distance_m) {
     LOG(ERROR) << "TCPs of " << traj.name << " come as close as " << min_distance << " m, below "
                << config.safety.min_tcp_distance_m << " m";
     return 1;
@@ -551,29 +585,31 @@ int Main(const Args& args) {
   LOG(INFO) << "Case " << traj.name << ": " << traj.t.size() << " rows over " << traj.t.back()
             << " s, TCP distance >= " << min_distance << " m";
 
-  const std::filesystem::path runs_root = std::filesystem::path(args.config).parent_path() / ".." / "runs";
+  // robots/<name>/ is two levels below the repository root.
+  const std::filesystem::path runs_root = std::filesystem::path(config.model.dir) / ".." / ".." / "runs";
   const std::filesystem::path case_root = std::filesystem::weakly_canonical(runs_root / traj.name);
-  const std::filesystem::path out =
-      !args.out.empty() ? std::filesystem::path(args.out) : case_root / (args.dry_run ? "dry" : "real_" + Timestamp());
+  const std::string session = args.solve     ? "solve_" + config.model.name + "_" + Timestamp()
+                              : args.dry_run ? "dry_" + Timestamp()
+                                             : "real_" + Timestamp();
+  const std::filesystem::path out = !args.out.empty() ? std::filesystem::path(args.out) : case_root / session;
   std::filesystem::create_directories(out);
-  const std::filesystem::path vel_check = case_root / "dry" / "vel_check.json";
-  if (!args.dry_run && !args.skip_vel_check &&
-      !CheckDryRunVelocity(vel_check, config.safety.max_feedforward_joint_vel_deg_s)) {
+  if (!args.dry_run && !args.solve && !args.skip_vel_check &&
+      !CheckSolveResult(args.solve_result, traj.name, config.model.name)) {
     return 1;
   }
 
   DualJoints lower, upper;
-  LoadJointLimits(config.urdf, lower, upper);
+  LoadJointLimits(config.model, lower, upper);
   const controller::Ocs2IkControllerConfig controller_config =
-      controller::LoadOcs2IkControllerConfig(config.controller_yaml);
+      controller::LoadOcs2IkControllerConfig(config.model.controller_yaml);
   double horizon_s = 0.0;
   ocs2::loadData::loadCppDataType(controller_config.left_info, "mpc.timeHorizon", horizon_s);
   LOG(INFO) << "Building the IK controller, the first build generates the CppAD libraries and takes minutes";
-  controller::DualArmOcs2IkController controller(config.urdf, controller_config);
+  controller::DualArmOcs2IkController controller(config.model.urdf, controller_config);
 
   std::unique_ptr<arm::ArmInterface> robot;
-  if (args.dry_run) {
-    robot = std::make_unique<arm::FakeArm>(config.startup.left_q_pd, config.startup.right_q_pd,
+  if (args.dry_run || args.solve) {
+    robot = std::make_unique<arm::FakeArm>(config.model.startup.left_q_pd, config.model.startup.right_q_pd,
                                            config.dry_run_time_constant_s);
   } else {
     robot = std::make_unique<arm::MarvinArm>(config.robot);
@@ -590,7 +626,7 @@ int Main(const Args& args) {
     return 1;
   }
   const DualJoints q_meas = Join(feedback.left.q, feedback.right.q);
-  const DualJoints q_pd = Join(config.startup.left_q_pd, config.startup.right_q_pd);
+  const DualJoints q_pd = Join(config.model.startup.left_q_pd, config.model.startup.right_q_pd);
   const double deviation = (q_meas - q_pd).cwiseAbs().maxCoeff();
   LOG(INFO) << "Measured joints " << q_meas.transpose() << ", largest deviation from q_pd " << deviation << " rad";
   if (deviation > config.safety.max_initial_deviation_rad) {
@@ -611,7 +647,7 @@ int Main(const Args& args) {
   }
   controller.Start();
   Replayer replayer(config, traj, args, controller, *robot, horizon_s, lower, upper);
-  replayer.WarmUp(q_meas, config.mpc_warm_up_s);
+  replayer.WarmUp(q_meas, config.model.mpc_warm_up_s);
   if (!robot->EnterJointImpedance()) {
     LOG(ERROR) << robot->last_error();
     controller.Stop();
@@ -633,12 +669,6 @@ int Main(const Args& args) {
   controller.Stop();
   robot->Disable();
 
-  if (ok && args.dry_run && args.stop_after.empty()) {
-    std::filesystem::create_directories(vel_check.parent_path());
-    WriteVelocityCheck(vel_check, replayer.max_cmd_vel_deg_s(), config.safety.max_feedforward_joint_vel_deg_s);
-    LOG(INFO) << "Joint command velocity peaks at " << replayer.max_cmd_vel_deg_s().maxCoeff() << " deg/s, written to "
-              << vel_check;
-  }
   LOG(INFO) << "Records in " << out;
   return ok ? 0 : 2;
 }

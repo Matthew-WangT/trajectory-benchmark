@@ -7,7 +7,8 @@
 namespace arm {
 
 // Stand-in robot of the dry run: the measured joint position follows the command through a first order lag, a new
-// feedback frame is published every millisecond of the monotonic clock.
+// feedback frame is published every millisecond of the monotonic clock. A zero time constant follows the command
+// exactly.
 class FakeArm : public ArmInterface {
  public:
   FakeArm(const JointVector& left_q0, const JointVector& right_q0, double time_constant_s);

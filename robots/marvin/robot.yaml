@@ -1,0 +1,67 @@
+# Marvin dual arms as the IK controller, the trajectory solve and the replay see them. Joint values in rad, relative
+# paths against this folder. Copy this folder to add a robot: dual arms of 7 joints each.
+name: marvin
+urdf: urdf/serial_marvin_with_gripper.urdf
+# Receding-horizon OCS2 IK controller, the base and end-effector frames of each arm are in its task .info files.
+controller: ocs2/controller.yaml
+
+joints:
+  left: [Joint1_L, Joint2_L, Joint3_L, Joint4_L, Joint5_L, Joint6_L, Joint7_L]
+  right: [Joint1_R, Joint2_R, Joint3_R, Joint4_R, Joint5_R, Joint6_R, Joint7_R]
+ee_frames:
+  left: left_gripper_f90c_end_effector_link
+  right: right_gripper_f90c_end_effector_link
+# Joint acceleration limits, the URDF has none.
+max_acc_deg_s2:
+  left: [450, 450, 900, 900, 900, 900, 900]
+  right: [450, 450, 900, 900, 900, 900, 900]
+
+# How the IK controller is driven, shared by the solve and the replay.
+ik:
+  # The IK controller is evaluated every `evaluate_every_ticks` 1 ms loop ticks, as in the reference pipeline.
+  evaluate_every_ticks: 2
+  # Send period in 1 ms ticks. 2 matches the velocity feedforward step: measured on infer-10, a 1 ms stream is
+  # received at ~920 frames/s right after entering the mode, the commands queue up and reach the arm ~270 ms late,
+  # while a 2 ms stream arrives within 3 ms and moves the arm 10 ms after sending. 1 is the period of the reference
+  # pipeline.
+  send_every_ticks: 2
+  # Reference given to the MPC, always starting at the pose of the last command now:
+  #   lookahead: the trajectory waypoints due within the next reference_window_s (0 = MPC horizon, 0.2 s), the chunk
+  #              the controller gets in the reference pipeline. Deviates from rule 3.3 (no lookahead) of
+  #              docs/test_requirements.md and has to be stated as such in the report.
+  #   latest:    only the newest received waypoint, placed at now + reference_lead_s (0 = MPC horizon), no lookahead.
+  reference_mode: lookahead
+  reference_window_s: 0
+  reference_lead_s: 0
+  # The controller runs this long before the first run without commanding the robot, so the slow first solves do not
+  # show up as a transient at the start of the first S1.
+  warm_up_s: 1.0
+
+startup:
+  # S0 target, the PD stand pose of the reference pipeline; the solve starts here.
+  q_pd:
+    left: [0.40, 0.30, 0.27, -2.43, 0.36, 0.05, 0.12]
+    right: [-0.37, 0.14, -0.36, -2.46, -0.39, 0.18, -0.28]
+  joint_speed_rad_s: 0.3
+  joint_min_duration_s: 3.0
+  # S1 TCP move from the S0 pose to the start pose of the case.
+  eef_linear_speed_m_s: 0.1
+  eef_angular_speed_rad_s: 0.5
+  eef_min_duration_s: 3.0
+  eef_waypoint_rate_hz: 200.0
+  hold_s: 2.0
+  end_hold_s: 2.0
+
+# Trajectory solve: the IK controller in real time against an ideal robot (q_meas = q_cmd), see docs/replay.md.
+solve:
+  # CPU and SCHED_FIFO priority of the 1 ms loop, cpu -1 leaves it to the OS.
+  rt_cpu: -1
+  rt_priority: 80
+  # Margin kept from the URDF joint limits, a command beyond it counts as a position violation.
+  joint_limit_margin_rad: 0.02
+  # The solve fails when the IK controller holds for this many consecutive evaluations.
+  max_consecutive_holds: 50
+  # Zero-phase Butterworth low pass (4th order) of the command before the acceleration is taken.
+  acc_lowpass_hz: 20.0
+  # Real-run precheck: joint command velocity limit of the PD velocity feedforward.
+  precheck_max_joint_vel_deg_s: 180.0

@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
-"""Replay a case on the Marvin, evaluate it and print the results, in one terminal session.
+"""Replay a case on the Marvin, evaluate it and print the results, in one terminal session; or solve a case on a
+robot of robots/ with the IK controller alone.
 
 Run it through ./benchmark.sh, which builds the image and the code and starts this script in the container.
-Options not given on the command line are picked with arrow-key menus: the mode (real robot / dry run), the case
-under data/, the config under config/ and what to run (the full case or one of the step-by-step bring-up stages).
-Then, without further input:
-  1. a real run without a dry run of the case runs the dry run first (it checks the joint velocities)
+Options not given on the command line are picked with arrow-key menus: the mode (real robot / dry run / trajectory
+solve), the case under data/, then the config under config/ and what to run (the full case or one of the
+step-by-step bring-up stages), or for the solve the robot under robots/. Then, without further input:
+  solve:
+  1. build/bin/replay --solve runs the IK controller in real time against an ideal robot
+  2. scripts/analyze_solve.py: solve error, joint limit margins, velocity / acceleration distributions, a table
+  real / dry run:
+  1. a full real run checks the latest trajectory solve of the case whose inputs match the current files (joint
+     velocity peak, joint limits), and runs the solve first when there is none
   2. build/bin/replay runs; its full log goes to <session>/replay.log, the key lines to the terminal
   3. for each run: scripts/make_delivery_csv.py and scripts/evaluate.py
   4. scripts/summarize.py over the runs, and a compact table of the headline metrics
@@ -15,6 +21,7 @@ disabled, the brakes hold the arms. The records are kept and evaluated when a ru
 
   ./benchmark.sh                                       # all interactive
   ./benchmark.sh --mode dry --case case02_fold_clothes_spd50 --runs 3 -y
+  ./benchmark.sh --mode solve --case case02_fold_clothes_spd50 --robot marvin
 """
 
 from __future__ import annotations
@@ -34,6 +41,11 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 REPLAY = REPO / "build/bin/replay"
+sys.path.insert(0, str(REPO / "python"))
+
+from trackeval.robots import read_yaml  # noqa: E402
+from trackeval.solve_inputs import input_hashes  # noqa: E402
+
 STAGES = {
     "full": "完整用例",
     "connect": "只连接并检查（robot.ini、反馈、初始偏差）",
@@ -106,6 +118,15 @@ def list_configs() -> list[Path]:
     return sorted(p for p in (REPO / "config").glob("*.yaml"))
 
 
+def list_robots() -> list[Path]:
+    return sorted(p.parent for p in (REPO / "robots").glob("*/robot.yaml"))
+
+
+def robot_of(config: Path) -> Path:
+    """Robot folder named by a replay config."""
+    return (config.parent / read_yaml(config)["robot_dir"]).resolve()
+
+
 def case_label(case: Path) -> str:
     meta = json.loads((case / "meta.json").read_text())
     return f"{case.name}  ({meta['duration_s']:.1f} s)"
@@ -122,16 +143,22 @@ def config_summary(path: Path) -> list[str]:
 
 @dataclass
 class Plan:
-    dry: bool
+    mode: str  # real / dry / solve
     case: Path
-    config: Path
+    config: Path | None  # replay config, None for the solve
+    robot: Path  # robot folder
     stage: str
     runs: int
+
+    @property
+    def dry(self) -> bool:
+        return self.mode == "dry"
 
 
 def resolve(args: argparse.Namespace) -> Plan:
     if args.mode is None:
-        args.mode = ("real", "dry")[select_menu("模式", ["真机 (real robot)", "dry-run（不连机器人）"])]
+        args.mode = ("real", "dry", "solve")[select_menu(
+            "模式", ["真机 (real robot)", "dry-run（不连机器人）", "轨迹求解 (solve)：只跑 IK，分析误差、余量与速度/加速度分布"])]
         print()
     cases = list_cases()
     if args.case is None:
@@ -141,6 +168,17 @@ def resolve(args: argparse.Namespace) -> Plan:
         case = Path(args.case) if Path(args.case).is_dir() else REPO / "data" / args.case
         if not (case / "eef_command.csv").is_file():
             sys.exit(f"unknown case {args.case}; known: {[c.name for c in cases]}")
+    if args.mode == "solve":
+        robots = list_robots()
+        if args.robot is None:
+            robot = robots[select_menu("机器人", [r.name for r in robots])] if len(robots) > 1 else robots[0]
+            if len(robots) > 1:
+                print()
+        else:
+            robot = Path(args.robot) if (Path(args.robot) / "robot.yaml").is_file() else REPO / "robots" / args.robot
+            if not (robot / "robot.yaml").is_file():
+                sys.exit(f"unknown robot {args.robot}; known: {[r.name for r in robots]}")
+        return Plan("solve", case, None, robot.resolve(), "full", args.runs or 1)
     configs = list_configs()
     if args.config is None:
         default = next((i for i, c in enumerate(configs) if c.name == "marvin.yaml"), 0)
@@ -160,21 +198,54 @@ def resolve(args: argparse.Namespace) -> Plan:
         stage, picked_runs = options[select_menu("运行", labels)]
         runs = runs or picked_runs
         print()
-    return Plan(args.mode == "dry", case, config, stage, runs or (3 if stage == "full" else 1))
+    return Plan(args.mode, case, config, robot_of(config), stage, runs or (3 if stage == "full" else 1))
 
 
-def replay_command(plan: Plan, out: Path, dry: bool | None = None, stage: str | None = None,
-                   runs: int | None = None) -> list[str]:
-    dry = plan.dry if dry is None else dry
-    stage = plan.stage if stage is None else stage
+def replay_command(plan: Plan, out: Path, solve_result: Path | None = None) -> list[str]:
     cmd = [str(REPLAY), "--config", str(plan.config), "--case", str(plan.case), "--out", str(out),
-           "--runs", str(plan.runs if runs is None else runs)]
-    if dry:
+           "--runs", str(plan.runs)]
+    if plan.dry:
         cmd.append("--dry-run")
-    if stage != "full":
-        # The bring-up stages stop before the trajectory, the joint velocity check of the dry run is about it.
-        cmd += ["--stop-after", stage, "--skip-vel-check"]
+    if plan.stage != "full":
+        # The bring-up stages stop before the trajectory, the precheck of the trajectory solve is about it.
+        cmd += ["--stop-after", plan.stage, "--skip-vel-check"]
+    elif solve_result is not None:
+        cmd += ["--solve-result", str(solve_result)]
     return cmd
+
+
+def solve_session(case: Path, robot: Path) -> Path:
+    return REPO / "runs" / case.name / f"solve_{robot.name}_{time.strftime('%Y%m%d_%H%M%S')}"
+
+
+def run_solve(case: Path, robot: Path, runs: int, session: Path, log: Path) -> Path | None:
+    """Trajectory solve of the case and its analysis; returns the metrics.json, None when either failed."""
+    cmd = [str(REPLAY), "--solve", "--robot", str(robot), "--case", str(case), "--out", str(session),
+           "--runs", str(runs)]
+    code = run_replay(cmd, log)
+    if code != 0:
+        warn(f"solve 退出码 {code}，完整日志 {os.path.relpath(log, REPO)}")
+        if not list(session.glob("run_*/raw_cmd.csv")):
+            return None
+    info("分析求解结果（误差、余量、速度/加速度分布、曲线）")
+    if not run_step([sys.executable, "scripts/analyze_solve.py", str(session), "--robot", str(robot), "--case",
+                     str(case)], log):
+        warn(f"分析失败，见 {os.path.relpath(log, REPO)}")
+    metrics = session / "metrics.json"
+    return metrics if metrics.is_file() else None
+
+
+def find_solve(case: Path, robot: Path) -> Path | None:
+    """metrics.json of the latest completed solve of the case on the robot whose inputs match the current files."""
+    current = input_hashes(robot, case)
+    for session in sorted((REPO / "runs" / case.name).glob(f"solve_{robot.name}_*"), reverse=True):
+        metrics = session / "metrics.json"
+        if not metrics.is_file():
+            continue
+        result = json.loads(metrics.read_text())
+        if result.get("status") == "ok" and result.get("inputs_sha256") == current:
+            return metrics
+    return None
 
 
 def run_replay(cmd: list[str], log: Path) -> int:
@@ -266,11 +337,54 @@ def print_table(runs: list[Path]) -> None:
     print("  " + "   ".join(f"{t} {cell(k).strip()}" for t, k in health))
 
 
+SOLVE_TABLE = [
+    ("TCP 误差 RMS [mm]", "tcp.{arm}.pos_rms_mm.norm"),
+    ("TCP 误差 p95 [mm]", "tcp.{arm}.pos_p95_mm.norm"),
+    ("TCP 误差 max [mm]", "tcp.{arm}.pos_max_mm.norm"),
+    ("TCP 姿态误差 RMS [deg]", "tcp.{arm}.rot_rms_deg"),
+    ("等效时延 [ms]", "tcp.{arm}.equiv_delay_ms"),
+    ("位置余量最小 [deg]", "margin.{arm}.pos_deg_min"),
+    ("速度 p99 最大关节 [deg/s]", "vel.{arm}.p99_deg_s_max"),
+    ("速度 max [deg/s]", "vel.{arm}.max_deg_s"),
+    ("速度余量最小 [%]", "margin.{arm}.vel_pct_min"),
+    ("加速度 p99 最大关节 [deg/s²]", "acc.{arm}.p99_deg_s2_max"),
+    ("加速度 max [deg/s²]", "acc.{arm}.max_deg_s2"),
+    ("加速度余量最小 [%]", "margin.{arm}.acc_pct_min"),
+]
+
+
+def print_solve_table(metrics_path: Path) -> None:
+    result = json.loads(metrics_path.read_text())
+    m = result["metrics"]
+
+    def cell(key: str) -> str:
+        value = m.get(key)
+        return "-" if value is None else f"{value:8.2f}"
+
+    runs = f"，{result['runs']} 次取最差" if result["runs"] > 1 else ""
+    print(f"\n{BOLD}求解结果 ({result['case']} on {result['robot']}, S3{runs}){RESET}")
+    print("  " + pad("", 32) + pad("左臂", 14) + "右臂")
+    for title, key in SOLVE_TABLE:
+        left, right = key.format(arm="left"), key.format(arm="right")
+        joints = ""
+        if "pos_deg_min" in key:
+            joints = f"   ({m.get('margin.left.pos_joint_min')}, {m.get('margin.right.pos_joint_min')})"
+        print("  " + pad(title, 32) + pad(cell(left), 14) + cell(right) + joints)
+    counts = "  ".join(f"{k} {m.get(f'violation.{k}.count', 0):.0f}"
+                       for k in ("position", "velocity", "acceleration", "command_step", "hold"))
+    print(f"  违规次数 (S1..S4): {counts}")
+    precheck = result["precheck"]
+    verdict = f"{GREEN}通过{RESET}" if precheck["pass"] else f"{RED}不通过: {precheck['reason']}{RESET}"
+    print(f"  真机预检: 速度峰值 {precheck['max_joint_vel_deg_s']:.1f} deg/s (限 {precheck['limit_deg_s']:.0f}) -> "
+          f"{verdict}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--mode", choices=("real", "dry"))
+    parser.add_argument("--mode", choices=("real", "dry", "solve"))
     parser.add_argument("--case", help="case folder name under data/ (or a path)")
     parser.add_argument("--config", help="config file name under config/ (or a path)")
+    parser.add_argument("--robot", help="solve: robot folder name under robots/ (or a path)")
     parser.add_argument("--stage", choices=tuple(STAGES), help="full, or stop after a bring-up stage")
     parser.add_argument("--runs", type=int, help="number of runs of the case")
     parser.add_argument("-y", "--yes", action="store_true", help="do not ask for confirmation before a real run")
@@ -283,23 +397,43 @@ def main() -> int:
     except KeyboardInterrupt:
         print("aborted")
         return 1
-    mode = "dry" if plan.dry else "real"
-    session = REPO / "runs" / plan.case.name / f"{mode}_{time.strftime('%Y%m%d_%H%M%S')}"
+    if plan.mode == "solve":
+        session = solve_session(plan.case, plan.robot)
+        log = session / "replay.log"
+        print(f"{BOLD}计划{RESET}: 轨迹求解  {plan.case.name}  机器人 {plan.robot.name}  {plan.runs} 次")
+        print(f"    输出                 {os.path.relpath(session, REPO)}")
+        metrics = run_solve(plan.case, plan.robot, plan.runs, session, log)
+        if metrics is None:
+            return 1
+        print_solve_table(metrics)
+        info(f"报告 {os.path.relpath(session / 'report.txt', REPO)}，曲线在各 run_*/plots/，数据 run_*/solve.csv")
+        return 0 if json.loads(metrics.read_text())["status"] == "ok" else 2
+
+    session = REPO / "runs" / plan.case.name / f"{plan.mode}_{time.strftime('%Y%m%d_%H%M%S')}"
     log = session / "replay.log"
-    print(f"{BOLD}计划{RESET}: {mode}  {plan.case.name}  {plan.config.name}  {STAGES[plan.stage]}"
+    print(f"{BOLD}计划{RESET}: {plan.mode}  {plan.case.name}  {plan.config.name}  {STAGES[plan.stage]}"
           f"{f'，{plan.runs} 次' if plan.stage == 'full' else ''}")
     for line in config_summary(plan.config):
         print(f"    {line}")
     print(f"    输出                 {os.path.relpath(session, REPO)}")
 
-    if not plan.dry:
-        vel_check = REPO / "runs" / plan.case.name / "dry" / "vel_check.json"
-        if plan.stage == "full" and not vel_check.is_file():
-            info("这个用例还没有 dry-run 结果，先跑一次 dry-run（检查关节速度）")
-            if run_replay(replay_command(plan, session.with_name(f"dry_{session.name[5:]}"), dry=True, stage="full",
-                                         runs=1), log) != 0:
-                warn("dry-run 失败，停止")
+    solve_result = None
+    if plan.mode == "real":
+        if plan.stage == "full":
+            solve_result = find_solve(plan.case, plan.robot)
+            if solve_result is None:
+                info("这个用例没有和当前配置一致的轨迹求解结果，先跑一次求解（检查关节速度与限位）")
+                solve_result = run_solve(plan.case, plan.robot, 1, solve_session(plan.case, plan.robot), log)
+                if solve_result is None:
+                    warn("轨迹求解失败，停止")
+                    return 1
+            else:
+                info(f"使用轨迹求解结果 {os.path.relpath(solve_result, REPO)}")
+            precheck = json.loads(solve_result.read_text())["precheck"]
+            if not precheck["pass"]:
+                warn(f"真机预检不通过: {precheck['reason']}，停止")
                 return 1
+            info(f"真机预检通过: 关节速度峰值 {precheck['max_joint_vel_deg_s']:.1f} deg/s，无位置越限")
         if not args.yes:
             try:
                 input(f"{BOLD}{RED}真机即将运动，确认周围安全后按 Enter 开始，Ctrl-C 取消 ...{RESET}")
@@ -307,7 +441,7 @@ def main() -> int:
                 print("\naborted")
                 return 1
 
-    code = run_replay(replay_command(plan, session), log)
+    code = run_replay(replay_command(plan, session, solve_result), log)
     if code != 0:
         warn(f"replay 退出码 {code}，完整日志 {os.path.relpath(log, REPO)}")
     if plan.stage != "full":
