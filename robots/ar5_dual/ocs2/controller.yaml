@@ -1,0 +1,26 @@
+# AR5 baseline MPC tuning, inherited from Marvin; not hardware validated.
+left_info: task_ar5_dual_arm_left.info
+right_info: task_ar5_dual_arm_right.info
+
+# CppAD generated libraries, kept across runs since the first generation takes minutes.
+tmp_working_dir: ../../../runs/.cppad_cache/ar5_dual
+
+# joint_regularization pulls toward the per-solve seed, which only makes sense for the one-shot
+# solver; in receding-horizon controller mode velocity smoothing is handled by the input cost R
+# in the task .info and the per-tick velocity clamp below.
+joint_reg_enable: false
+
+default_q_reg_enable: true
+default_q_reg_weight: 0.005
+default_reg_q_weight_scale: [5.0, 5.0, 5.0, 1.0, 1.0, 1.0, 1.0]
+
+# Per-tick command increment is clamped to max_joint_velocity_rad_s * tick period.
+max_joint_velocity_rad_s: 5.235987755982989
+# Evaluate() holds position when the newest policy is older than this. Must stay below the
+# task .info mpc timeHorizon, since evaluating beyond the policy horizon extrapolates.
+policy_max_age_s: 0.1
+# Upper bound for the background solver thread loop rate.
+mpc_max_frequency_hz: 200.0
+# CPU core for the MPC solver threads; -1 leaves scheduling to the OS. Keep MPC threads off
+# the SCHED_FIFO real-time core of the replay loop.
+mpc_thread_cpu: -1

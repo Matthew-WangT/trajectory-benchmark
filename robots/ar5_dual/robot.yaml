@@ -1,0 +1,39 @@
+# AR5 dual arm with fixed Marvin F90C grippers; trajectory solve only.
+name: ar5_dual
+urdf: urdf/ar5_dual.urdf
+controller: ocs2/controller.yaml
+joints:
+  left: [AR5-5_08L-W4C1C5_joint_1, AR5-5_08L-W4C1C5_joint_2, AR5-5_08L-W4C1C5_joint_3, AR5-5_08L-W4C1C5_joint_4, AR5-5_08L-W4C1C5_joint_5, AR5-5_08L-W4C1C5_joint_6, AR5-5_08L-W4C1C5_joint_7]
+  right: [AR5-5_08R-W4C1C5_joint_1, AR5-5_08R-W4C1C5_joint_2, AR5-5_08R-W4C1C5_joint_3, AR5-5_08R-W4C1C5_joint_4, AR5-5_08R-W4C1C5_joint_5, AR5-5_08R-W4C1C5_joint_6, AR5-5_08R-W4C1C5_joint_7]
+ee_frames:
+  left: left_gripper_f90c_end_effector_link
+  right: right_gripper_f90c_end_effector_link
+# Manufacturer acceleration limits are unavailable; omit instead of copying Marvin's.
+ik:
+  evaluate_every_ticks: 2
+  send_every_ticks: 2
+  reference_mode: lookahead
+  reference_window_s: 0
+  reference_lead_s: 0
+  warm_up_s: 1.0
+startup:
+  # Marvin q_pd mapped to AR5: J2/J4/J6 reversed; J1/J3/J5/J7 unchanged.
+  q_pd:
+    left: [0.4, -0.3, 0.27, 2.43, 0.36, -0.05, 0.12]
+    right: [-0.37, -0.14, -0.36, 2.46, -0.39, -0.18, -0.28]
+  joint_speed_rad_s: 0.3
+  joint_min_duration_s: 3.0
+  eef_linear_speed_m_s: 0.1
+  eef_angular_speed_rad_s: 0.5
+  eef_min_duration_s: 3.0
+  eef_waypoint_rate_hz: 200.0
+  hold_s: 2.0
+  end_hold_s: 2.0
+solve:
+  rt_cpu: -1
+  rt_priority: 80
+  joint_limit_margin_rad: 0.02
+  max_consecutive_holds: 50
+  acc_lowpass_hz: 20.0
+  # Additional conservative reporting threshold, not an AR5 hardware specification.
+  precheck_max_joint_vel_deg_s: 175.0

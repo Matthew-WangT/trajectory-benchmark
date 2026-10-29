@@ -32,3 +32,13 @@ scripts/      benchmark.py（菜单与流程）、analyze_solve.py、view_solve.
 |---|---|---|---|
 | case01 | 1.26 / 1.56，1.22 / 1.44 m/s | 2.30 / 3.03，2.22 / 2.69 rad/s | 240 mm |
 | case02 | 1.31 / 1.55，1.25 / 1.34 m/s | 2.57 / 2.77，2.70 / 3.08 rad/s | 253 mm |
+
+### AR5 双臂轨迹求解
+
+已接入带 Marvin F90C 夹爪的 `ar5_dual`（base 间距 240 mm，肩部高度 1.121 m）。运行：
+
+```sh
+./benchmark.sh --mode solve --case case02_fold_clothes_spd50 --robot ar5_dual --runs 1 --no-view
+```
+
+安装坐标、OCS2 参数和约束说明见 [robots/ar5_dual/README.md](robots/ar5_dual/README.md)。
