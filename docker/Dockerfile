@@ -36,4 +36,8 @@ RUN pip3 install --no-cache-dir uv \
     && uv pip install --system --no-cache --exclude-newer 2025-06-15 pin==3.7.0 \
     && uv pip install --system --no-cache scipy matplotlib "rosbags>=0.11"
 
+# 3D playback of the trajectory solve in the browser (pinocchio MeshcatVisualizer), a layer of its own so that adding
+# it does not rebuild the ones above.
+RUN uv pip install --system --no-cache --exclude-newer 2025-06-15 meshcat
+
 WORKDIR /workspace

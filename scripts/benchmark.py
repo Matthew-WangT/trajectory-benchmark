@@ -9,6 +9,7 @@ step-by-step bring-up stages), or for the solve the robot under robots/. Then, w
   solve:
   1. build/bin/replay --solve runs the IK controller in real time against an ideal robot
   2. scripts/analyze_solve.py: solve error, joint limit margins, velocity / acceleration distributions, a table
+  3. scripts/view_solve.py: 3D playback of the robot and the target / solved TCP paths in the browser (meshcat)
   real / dry run:
   1. a full real run checks the latest trajectory solve of the case whose inputs match the current files (joint
      velocity peak, joint limits), and runs the solve first when there is none
@@ -385,6 +386,7 @@ def main() -> int:
     parser.add_argument("--case", help="case folder name under data/ (or a path)")
     parser.add_argument("--config", help="config file name under config/ (or a path)")
     parser.add_argument("--robot", help="solve: robot folder name under robots/ (or a path)")
+    parser.add_argument("--no-view", action="store_true", help="solve: skip the 3D playback in the browser")
     parser.add_argument("--stage", choices=tuple(STAGES), help="full, or stop after a bring-up stage")
     parser.add_argument("--runs", type=int, help="number of runs of the case")
     parser.add_argument("-y", "--yes", action="store_true", help="do not ask for confirmation before a real run")
@@ -407,6 +409,9 @@ def main() -> int:
             return 1
         print_solve_table(metrics)
         info(f"报告 {os.path.relpath(session / 'report.txt', REPO)}，曲线在各 run_*/plots/，数据 run_*/solve.csv")
+        if not args.no_view and sys.stdin.isatty() and (session / "run_1/solve.csv").is_file():
+            info("3D 回放（浏览器打开下面的地址；远程机器先 ssh -L 7000:localhost:7000 <host>）")
+            subprocess.run([sys.executable, "scripts/view_solve.py", str(session)], cwd=REPO)
         return 0 if json.loads(metrics.read_text())["status"] == "ok" else 2
 
     session = REPO / "runs" / plan.case.name / f"{plan.mode}_{time.strftime('%Y%m%d_%H%M%S')}"

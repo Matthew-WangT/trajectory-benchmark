@@ -103,9 +103,14 @@ docker/run.sh python3 scripts/evaluate.py their.csv --reference data/case02_fold
   - `metrics.json`：全部指标、违规、真机预检结论（`precheck`），以及输入文件的 sha256；
   - `config_snapshot/`：这次用到的 robot.yaml、URDF、controller.yaml 和 .info；
   - 每个 `run_<i>/` 下有 `raw_cmd.csv`、`solve.csv`（500 Hz，含目标与求解 TCP、q_cmd、dq、ddq）和 `plots/`。`plots/` 里依次是：两臂的 TCP 目标与求解叠画并附误差、关节 q 与限位、速度和加速度曲线与限值、S3 速度和加速度直方图（标出 p50/p95/p99）。
+- **3D 回放**：求解完成、结果表打印出来之后，会自动启动 meshcat，并打印一个浏览器地址（`http://127.0.0.1:7000/static/`；容器用的是宿主机网络，所以在宿主机上直接打开即可）。机器人按 `q_cmd` 运动，蓝线是目标 TCP 轨迹，橙线是求解得到的 FK(q_cmd)，小球标出当前时刻的位置。在面板 Animations 里可以播放、暂停、拖时间条、调倍速。按 Enter 关闭。
+  - 在远程机器上跑时，先在本地执行 `ssh -L 7000:localhost:7000 <host>`。
+  - 以前的求解也能回看：`docker/run.sh python3 scripts/view_solve.py runs/<case>/solve_<robot>_<时间戳> [--run 2]`。
+  - 不需要回放时加 `--no-view`。
+  - 网格在 `robots/<name>/meshes/`（走 LFS），URDF 里写相对路径。
 - **新增一台机器人**（必须是双臂，每臂 7 个关节）：
   1. 把 `robots/marvin` 拷贝成 `robots/<name>`；
-  2. 换上自己的 URDF；
+  2. 换上自己的 URDF 和网格（网格用相对 URDF 的路径）；
   3. 在 `robot.yaml` 里改关节名、TCP frame、`q_pd`、加速度限值；
   4. 在两份 `.info` 里改 `baseFrame`、`eeFrame` 和 `removeJoints`。
 

@@ -20,12 +20,12 @@ Marvin 上的回放程序（OCS2 滚动时域 IK + 关节阻抗）、交付 CSV 
 
 ```
 src/          replay 程序：mpc/（移植的 IK controller）、arm/（Marvin SDK / dry-run）、replay/（时间轴、安全、录制）
-robots/       每台机器人一个目录：robot.yaml（关节、TCP、加速度限值、IK 与起始参数）、urdf/、ocs2/（IK controller 与 task .info）
+robots/       每台机器人一个目录：robot.yaml（关节、TCP、加速度限值、IK 与起始参数）、urdf/、meshes/、ocs2/（IK controller 与 task .info）
 config/       marvin.yaml（真机：IP、增益、工具、安全参数，引用 robots/marvin）
 third_party/  Marvin 控制 SDK（Apache-2.0）、OCS2 子集（BSD-3）
 python/       trackeval 评价包
 benchmark.sh  唯一入口：构建 + 菜单 + replay + 评价 + 打印
-scripts/      benchmark.py（菜单与流程）、analyze_solve.py、make_delivery_csv.py、evaluate.py、summarize.py
+scripts/      benchmark.py（菜单与流程）、analyze_solve.py、view_solve.py（3D 回放）、make_delivery_csv.py、evaluate.py、summarize.py
 ```
 
 | 用例 | 线速度 p99 / max（左，右） | 角速度 p99 / max（左，右） | 两臂最小间距 |
