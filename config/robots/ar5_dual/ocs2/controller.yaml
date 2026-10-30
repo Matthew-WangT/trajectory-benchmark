@@ -3,7 +3,7 @@ left_info: task_ar5_dual_arm_left.info
 right_info: task_ar5_dual_arm_right.info
 
 # CppAD generated libraries, kept across runs since the first generation takes minutes.
-tmp_working_dir: ../../../runs/.cppad_cache/ar5_dual
+tmp_working_dir: ../../../../runs/.cppad_cache/ar5_dual
 
 # joint_regularization pulls toward the per-solve seed, which only makes sense for the one-shot
 # solver; in receding-horizon controller mode velocity smoothing is handled by the input cost R

@@ -370,7 +370,7 @@ def worst(per_run: list[dict]) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("session", type=Path, help="output folder of replay --solve, holding run_*/")
-    parser.add_argument("--robot", type=Path, help="robot folder, by default robots/<robot of run_info.json>")
+    parser.add_argument("--robot", type=Path, help="robot folder, by default config/robots/<robot of run_info.json>")
     parser.add_argument("--case", type=Path, help="case folder, by default data/<case of run_info.json>")
     parser.add_argument("--no-fig", action="store_true")
     parser.add_argument("--dpi", type=int, default=110)
@@ -381,7 +381,7 @@ def main() -> int:
         print(f"error: no run_* in {args.session}", file=sys.stderr)
         return 1
     info = json.loads((runs[0] / "run_info.json").read_text())
-    robot_dir = args.robot or REPO_ROOT / "robots" / info["robot"]
+    robot_dir = args.robot or REPO_ROOT / "config" / "robots" / info["robot"]
     case_dir = args.case or REPO_ROOT / "data" / info["case"]
     profile = load_profile(robot_dir)
     cfg = read_yaml(robot_dir / "robot.yaml")

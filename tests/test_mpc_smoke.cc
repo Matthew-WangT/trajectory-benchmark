@@ -18,7 +18,7 @@ namespace {
 // 10 mm / 1.5 deg on the right arm from q_pd. The bounds below catch a broken port, not that offset.
 TEST(MpcSmokeTest, ConvergesToAStaticTarget) {
   const std::string source_dir = BENCHMARK_SOURCE_DIR;
-  const replay::RobotModelConfig robot = replay::LoadRobotModelConfig(source_dir + "/robots/marvin");
+  const replay::RobotModelConfig robot = replay::LoadRobotModelConfig(source_dir + "/config/robots/marvin");
   const Ocs2IkControllerConfig config = LoadOcs2IkControllerConfig(robot.controller_yaml);
   DualArmOcs2IkController controller(robot.urdf, config);
 
@@ -65,7 +65,7 @@ TEST(MpcSmokeTest, ConvergesToAStaticTarget) {
 // a broken multi end-effector problem (a swapped or ignored target), not the regularization offset.
 TEST(MpcSmokeTest, WholeBodyConvergesToAStaticTarget) {
   const std::string source_dir = BENCHMARK_SOURCE_DIR;
-  const replay::RobotModelConfig robot = replay::LoadRobotModelConfig(source_dir + "/robots/s1");
+  const replay::RobotModelConfig robot = replay::LoadRobotModelConfig(source_dir + "/config/robots/s1");
   const Ocs2IkControllerConfig config = LoadOcs2IkControllerConfig(robot.controller_yaml);
   ASSERT_EQ(config.type, "whole_body");
   const std::unique_ptr<IkController> controller = MakeIkController(robot.urdf, config);

@@ -9,15 +9,15 @@ eef_command.csv ──> OCS2 滚动时域 IK ──q_cmd──> 关节阻抗 (SD
                     500 Hz 评估              500 Hz 下发
 ```
 
-- **IK**：`src/mpc/` 移植自参考管线的 `controller::DualArmOcs2IkController`，参数和 task `.info` 都是原样拷贝（`robots/marvin/ocs2/`）。后台线程持续跑 MPC，控制线程每 2 ms `Evaluate` 一次。
-- **参考轨迹**（`robots/marvin/robot.yaml` 的 `ik.reference_mode`）：
+- **IK**：`src/mpc/` 移植自参考管线的 `controller::DualArmOcs2IkController`，参数和 task `.info` 都是原样拷贝（`config/robots/marvin/ocs2/`）。后台线程持续跑 MPC，控制线程每 2 ms `Evaluate` 一次。
+- **参考轨迹**（`config/robots/marvin/robot.yaml` 的 `ik.reference_mode`）：
   - `lookahead`（默认，与参考管线一致）：每当有 waypoint 到达或进入窗口时，参考设为"当前命令的 FK 位姿（now）+ 未来 `reference_window_s`（默认 0.2 s，即 MPC 视界）内到期的所有 waypoint"，相当于线上 VLA 交给 MPC 的 chunk。**这违反了测试要求第 3 节第 3 条（不得前瞻），交付"说明"里必须写明。**
   - `latest`：严格因果，只给最新到达的那个点，放在 `now + reference_lead_s` 处并保持。
   - case02 dry-run 的 TCP 误差 RMS：lookahead 约 17 mm（等效时延 7 ms）；latest 在 lead 取 0.2 s 时约 92 mm（185 ms），取 5 ms 时约 57 mm（95 ms）。lookahead 下剩下约 16 mm 是 IK 本身的误差，不是时延（`default_q` 正则、输入代价 R、每次求解只迭代 1 次）。
 - **预热**：进入阻抗模式之前，MPC 先对着静止目标跑 `ik.warm_up_s`（1 s），不向机器人下发命令。如果不预热，首次运行的 S1 起步阶段会出现 75–420 deg/s 的关节命令瞬态。
 - **下发**：1 ms 的 SCHED_FIFO 循环，每个 tick 读一次反馈；`q_cmd` 每 `ik.send_every_ticks` 个 tick 发一次（默认 2，即 500 Hz，和 PD 速度前馈的 2 ms step 一致）。在 infer-10 上实测：按 1 kHz 发送时，进入阻抗模式后的前几秒控制器每秒只收到约 920 帧，命令在接收端排起队，晚约 270 ms 才到达手臂，而且之后不会消退；按 500 Hz 发送时，控制器 3 ms 内收到，下发到实测运动约 7–10 ms。
 - **控制模式**：只用关节阻抗。kp/kd、vel/acc ratio、速度前馈、工具参数都在 `config/marvin.yaml` 里，左右臂分别配置。
-- **配置拆分**：机器人本体放在 `robots/<name>/`，包括 `robot.yaml`（URDF、关节名、TCP frame、关节加速度限值、`ik:` 段、`startup:` 段即 `q_pd` 与各段时长、`solve:` 段）、`urdf/` 和 `ocs2/`，轨迹求解和 replay 共用这一份。`config/marvin.yaml` 只放真机相关的内容，并通过 `robot_dir` 引用机器人目录。
+- **配置拆分**：机器人本体放在 `config/robots/<name>/`，包括 `robot.yaml`（URDF、关节名、TCP frame、关节加速度限值、`ik:` 段、`startup:` 段即 `q_pd` 与各段时长、`solve:` 段）、`urdf/` 和 `ocs2/`，轨迹求解和 replay 共用这一份。`config/marvin.yaml` 只放真机相关的内容，并通过 `robot_dir` 引用机器人目录。
 
 每次运行的时间轴：
 
@@ -88,9 +88,9 @@ docker/run.sh python3 scripts/evaluate.py their.csv --reference data/case02_fold
 
 ## 轨迹求解
 
-只跑 IK，不接机械臂：看一条轨迹在某台机器人上经过线上同款 OCS2 MPC IK 能解成什么样，包括求解误差、关节限位余量、速度和加速度分布。`./benchmark.sh` 选"轨迹求解"，再选用例和机器人（`robots/` 下的目录）。
+只跑 IK，不接机械臂：看一条轨迹在某台机器人上经过线上同款 OCS2 MPC IK 能解成什么样，包括求解误差、关节限位余量、速度和加速度分布。`./benchmark.sh` 选"轨迹求解"，再选用例和机器人（`config/robots/` 下的目录）。
 
-- **求解**：`replay --solve --robot robots/<name>` 用的是同一个 1 ms 实时循环、后台 MPC 线程和 lookahead 参考，机器人换成理想跟随（`q_meas = q_cmd`）。从 `q_pd` 出发，S0 是在 `q_pd` 静止 `startup.joint_min_duration_s`，作用和 replay 里 S0 结束时一样：让预热留下的 policy 过期，否则 S1 第一拍会跳。之后是 S1–S4。实时求解每次结果会略有差异；`--runs N` 跑多次时，汇总取每一项的最差值。
+- **求解**：`replay --solve --robot config/robots/<name>` 用的是同一个 1 ms 实时循环、后台 MPC 线程和 lookahead 参考，机器人换成理想跟随（`q_meas = q_cmd`）。从 `q_pd` 出发，S0 是在 `q_pd` 静止 `startup.joint_min_duration_s`，作用和 replay 里 S0 结束时一样：让预热留下的 policy 过期，否则 S1 第一拍会跳。之后是 S1–S4。实时求解每次结果会略有差异；`--runs N` 跑多次时，汇总取每一项的最差值。
 - **不中止**：越限只记次数、首次时刻和涉及的关节，曲线上标红。只有命令出现 NaN，或者 IK 连续 hold 超过 `solve.max_consecutive_holds`，才停下并标为 `failed`。
 - **指标**：除"违规"一项统计 S1–S4 外，其余都只统计 S3。
   - 求解误差：TCP 目标和 FK(q_cmd) 比较，给出位置 xyz 三轴、模长和姿态角的 rms / p50 / p95 / p99 / max。另外在 −100…200 ms 范围内搜索等效时延，并给出时间对齐后的残差。
@@ -109,20 +109,20 @@ docker/run.sh python3 scripts/evaluate.py their.csv --reference data/case02_fold
   - 在远程机器上跑时，先在本地执行 `ssh -L 7000:localhost:7000 <host>`。
   - 以前的求解也能回看：`docker/run.sh python3 scripts/view_solve.py runs/<case>/solve_<robot>_<时间戳> [--run 2]`。
   - 不需要回放时加 `--no-view`。
-  - 网格在 `robots/<name>/meshes/`（走 LFS），URDF 里写相对路径。
+  - 网格在 `config/robots/<name>/meshes/`（走 LFS），URDF 里写相对路径。
 - **新增一台机器人**（双臂，每臂 7 个关节；可以带一个两臂共用的腰）：
-  1. 把 `robots/marvin` 拷贝成 `robots/<name>`；
+  1. 把 `config/robots/marvin` 拷贝成 `config/robots/<name>`；
   2. 换上自己的 URDF 和网格（网格用相对 URDF 的路径）；
   3. 在 `robot.yaml` 里改关节名、TCP frame、`q_pd`、加速度限值；
   4. 在两份 `.info` 里改 `baseFrame`、`eeFrame` 和 `removeJoints`。
 
-  有腰的机器人参照 `robots/s1`：`joints.torso` 和 `startup.q_pd.torso` 列出腰关节；`ocs2/controller.yaml` 用 `type: whole_body`，配一份 `.info`，在 `model_information.eeFrames` 里依次写左、右 TCP。这样就是一个 MPC 同时跟踪两个 TCP，腰作为冗余参与求解。关节向量的顺序是腰、左臂、右臂；所有 CSV 里，腰的列以 `t_` 开头，排在两臂前面。
+  有腰的机器人参照 `config/robots/s1`：`joints.torso` 和 `startup.q_pd.torso` 列出腰关节；`ocs2/controller.yaml` 用 `type: whole_body`，配一份 `.info`，在 `model_information.eeFrames` 里依次写左、右 TCP。这样就是一个 MPC 同时跟踪两个 TCP，腰作为冗余参与求解。关节向量的顺序是腰、左臂、右臂；所有 CSV 里，腰的列以 `t_` 开头，排在两臂前面。
 
   菜单会自动列出新机器人。第一次求解要生成 CppAD 库，需要几分钟。
 
 ## Astribot S1
 
-S1 有 4 个腰关节，两臂各 7 个关节，装 F90C 夹爪。模型、限位和坐标约定见 [robots/s1/README.md](../robots/s1/README.md)。
+S1 有 4 个腰关节，两臂各 7 个关节，装 F90C 夹爪。模型、限位和坐标约定见 [config/robots/s1/README.md](../config/robots/s1/README.md)。
 
 - **轨迹求解**：`./benchmark.sh --mode solve --robot s1`。用 OCS2 全身 IK 解 18 个关节，流程和指标同上一节，表里多出一列"腰"。
 - **真机**：`./benchmark.sh --mode real --config s1.yaml`。S1 只能通过它的 Python SDK 控制（ROS 2 Humble），所以链路分成两个进程：

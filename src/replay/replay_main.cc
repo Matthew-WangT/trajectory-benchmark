@@ -1,7 +1,7 @@
 // Replays a benchmark case on the Marvin dual arms in the joint impedance mode, the TCP commands going through the
 // receding-horizon OCS2 IK controller, and records the robot feedback.
 //
-//   replay --solve --robot robots/marvin --case data/case02_fold_clothes_spd50
+//   replay --solve --robot config/robots/marvin --case data/case02_fold_clothes_spd50
 //   replay --config config/marvin.yaml --case data/case02_fold_clothes_spd50 --dry-run
 //   replay --config config/marvin.yaml --case data/case02_fold_clothes_spd50 --runs 3 --solve-result METRICS_JSON
 //
@@ -589,7 +589,7 @@ int MainS1(const Args& args) {
   }
   const s1::S1Config config = s1::LoadS1Config(args.config);
   const CaseTrajectory traj = LoadCase(args.case_dir);
-  const std::filesystem::path runs_root = std::filesystem::path(config.model.dir) / ".." / ".." / "runs";
+  const std::filesystem::path runs_root = std::filesystem::path(config.model.dir) / ".." / ".." / ".." / "runs";
   const std::filesystem::path out =
       !args.out.empty() ? std::filesystem::path(args.out)
                         : std::filesystem::weakly_canonical(runs_root / traj.name) / ("real_" + Timestamp());
@@ -625,8 +625,8 @@ int Main(const Args& args) {
   LOG(INFO) << "Case " << traj.name << ": " << traj.t.size() << " rows over " << traj.t.back()
             << " s, TCP distance >= " << min_distance << " m";
 
-  // robots/<name>/ is two levels below the repository root.
-  const std::filesystem::path runs_root = std::filesystem::path(config.model.dir) / ".." / ".." / "runs";
+  // config/robots/<name>/ is three levels below the repository root.
+  const std::filesystem::path runs_root = std::filesystem::path(config.model.dir) / ".." / ".." / ".." / "runs";
   const std::filesystem::path case_root = std::filesystem::weakly_canonical(runs_root / traj.name);
   const std::string session = args.solve     ? "solve_" + config.model.name + "_" + Timestamp()
                               : args.dry_run ? "dry_" + Timestamp()

@@ -21,7 +21,7 @@ ee_frames:
 ik:
   evaluate_every_ticks: 2
   send_every_ticks: 2
-  # See robots/marvin/robot.yaml.
+  # See config/robots/marvin/robot.yaml.
   reference_mode: lookahead
   reference_window_s: 0
   reference_lead_s: 0

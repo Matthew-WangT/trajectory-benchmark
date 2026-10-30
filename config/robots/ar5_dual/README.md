@@ -17,7 +17,7 @@
 
 ## Marvin F90C 夹爪
 
-左右 AR5 的 `AR5-5_08L-W4C1C5_flan_link` / `AR5-5_08R-W4C1C5_flan_link` 各连接一套来自 `robots/marvin/urdf/serial_marvin_with_gripper.urdf` 的转接法兰与 F90C 夹爪。新增固定安装关节为 `left_ar5_to_gripper_flange` / `right_ar5_to_gripper_flange`，xyz 为 `0 0 0`，左侧 rpy 为 `0 0 −π/2`，右侧为 `0 0 +π/2`，即左夹爪绕 AR5 末端法兰 +Z 旋转 −90°、右夹爪旋转 +90°，转接法兰 +Z 与 AR5 末端 +Z 保持对齐。未沿用 Marvin Link7 到法兰的变换，因为 AR5 已有独立的末端法兰坐标系。
+左右 AR5 的 `AR5-5_08L-W4C1C5_flan_link` / `AR5-5_08R-W4C1C5_flan_link` 各连接一套来自 `config/robots/marvin/urdf/serial_marvin_with_gripper.urdf` 的转接法兰与 F90C 夹爪。新增固定安装关节为 `left_ar5_to_gripper_flange` / `right_ar5_to_gripper_flange`，xyz 为 `0 0 0`，左侧 rpy 为 `0 0 −π/2`，右侧为 `0 0 +π/2`，即左夹爪绕 AR5 末端法兰 +Z 旋转 −90°、右夹爪旋转 +90°，转接法兰 +Z 与 AR5 末端 +Z 保持对齐。未沿用 Marvin Link7 到法兰的变换，因为 AR5 已有独立的末端法兰坐标系。
 
 保留 Marvin 夹爪的网格、碰撞体、惯量、手指固定姿态与 TCP 变换。删除固定关节上无效的 mimic 标签。夹爪不增加活动自由度，整机仍为 14 自由度，暂不支持开合控制。网格复制到本目录，模型不依赖 Marvin 目录。
 
@@ -32,8 +32,8 @@
 生成实际网格预览及结构校验（需要 numpy、trimesh、matplotlib）：
 
 ```sh
-python robots/ar5_dual/preview.py
-python robots/ar5_dual/preview.py --zero
+python config/robots/ar5_dual/preview.py
+python config/robots/ar5_dual/preview.py --zero
 ```
 
 中间支撑仅为示意视觉：立柱半径 65 mm、长度 690 mm，Z 范围 −750 到 −60 mm；肩部横梁半径 55 mm、长度 240 mm。支撑没有碰撞体和惯量，不能据此做支撑碰撞检测或整机动力学仿真。原始 base 本身也没有惯量。此模型适合固定基座可视化与运动学；真实支撑尺寸、动力学及自碰撞应另行确认。

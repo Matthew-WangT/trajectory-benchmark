@@ -1,6 +1,6 @@
 # Replay of the benchmark cases on the Astribot S1 through its SDK: scripts/s1_bridge.py (in the docker/s1_bridge
 # image) drives the robot, this replay sends it one command per SDK period over UDP. See docs/replay.md.
-robot_dir: ../robots/s1
+robot_dir: robots/s1
 
 bridge:
   # UDP port of the replay on 127.0.0.1; the sidecar sends its feedback there and waits for the answer.

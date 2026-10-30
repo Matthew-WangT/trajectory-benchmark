@@ -21,8 +21,8 @@ Marvin 上的回放程序（OCS2 滚动时域 IK + 关节阻抗）、交付 CSV 
 ```
 src/          replay 程序：mpc/（移植的 IK controller）、arm/（Marvin SDK / dry-run）、replay/（时间轴、安全、录制）
 src/s1/       Astribot S1 真机：与 SDK sidecar 的 UDP 协议、运行循环、安全检查
-robots/       每台机器人一个目录：robot.yaml（关节、TCP、加速度限值、IK 与起始参数）、urdf/、meshes/、ocs2/（IK controller 与 task .info）
-config/       marvin.yaml（真机：IP、增益、工具、安全参数，引用 robots/marvin）、s1.yaml（S1 真机：sidecar、坐标、安全开关）
+config/       marvin.yaml、s1.yaml：真机通信、控制与安全参数
+  robots/     每台机器人一个目录：robot.yaml（关节、TCP、限值、IK 与起始参数）、urdf/、meshes/、ocs2/；真机配置通过 robot_dir 引用
 third_party/  Marvin 控制 SDK（Apache-2.0）、OCS2 子集（BSD-3，加了多末端）、S1 真机要的 astribot_sdk 不随仓库提供，见 docs/replay.md
 docker/       Dockerfile（base 与 s1 两个镜像，s1 只给 S1 真机用）、image.env / image.sh（镜像名与版本、构建与发布）、run.sh、s1_sdk_env.sh
 python/       trackeval 评价包
@@ -43,11 +43,11 @@ scripts/      benchmark.py（菜单与流程）、analyze_solve.py、view_solve.
 ./benchmark.sh --mode solve --case case02_fold_clothes_spd50 --robot ar5_dual --runs 1 --no-view
 ```
 
-安装坐标、OCS2 参数和约束说明见 [robots/ar5_dual/README.md](robots/ar5_dual/README.md)。
+安装坐标、OCS2 参数和约束说明见 [config/robots/ar5_dual/README.md](config/robots/ar5_dual/README.md)。
 
 ### Astribot S1（带腰）
 
-`robots/s1` 有 4 个腰关节，两臂各 7 个关节，装 F90C 夹爪。轨迹求解用 OCS2 全身 IK（一个 MPC，18 个关节）；真机通过 SDK 的 WBC 流式跟踪 TCP：
+`config/robots/s1` 有 4 个腰关节，两臂各 7 个关节，装 F90C 夹爪。轨迹求解用 OCS2 全身 IK（一个 MPC，18 个关节）；真机通过 SDK 的 WBC 流式跟踪 TCP：
 
 ```sh
 ./benchmark.sh --mode solve --case case02_fold_clothes_spd50 --robot s1 --no-view
@@ -55,4 +55,4 @@ scripts/      benchmark.py（菜单与流程）、analyze_solve.py、view_solve.
 ./benchmark.sh --mode real --case case02_fold_clothes_spd50 --config s1.yaml --stage connect
 ```
 
-链路、协议、安全开关见 [docs/replay.md](docs/replay.md#astribot-s1)；模型和坐标约定见 [robots/s1/README.md](robots/s1/README.md)。
+链路、协议、安全开关见 [docs/replay.md](docs/replay.md#astribot-s1)；模型和坐标约定见 [config/robots/s1/README.md](config/robots/s1/README.md)。

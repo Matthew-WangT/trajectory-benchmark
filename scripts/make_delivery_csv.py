@@ -5,7 +5,7 @@
 
 Rows are the IK evaluations (500 Hz) from S1 on, t_s = 0 at the first trajectory command (first S3 row). The command
 pose is the TCP target fed to the IK controller, the measured pose FK(q_meas) of the URDF, both in the robot BASE
-frame (T_yours_ours = I on the Marvin, robots/<name>/README.md otherwise). A robot with a torso gets t_* joint
+frame (T_yours_ours = I on the Marvin, config/robots/<name>/README.md otherwise). A robot with a torso gets t_* joint
 columns before the arms. The feedback is interpolated linearly onto the command ticks. A `phase`
 column keeps the S1..S4 split. Writes delivery.csv into the run folder.
 """

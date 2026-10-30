@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-ROBOTS_DIR = REPO_ROOT / "robots"
+ROBOTS_DIR = REPO_ROOT / "config" / "robots"
 
 
 @dataclass(frozen=True)
@@ -26,7 +26,7 @@ class RobotProfile:
     urdf: Path | None
     arms: tuple[ArmSpec, ...]
     joint_order: tuple[str, ...]  # the torso joints (if any), then both arms side by side, the left arm first
-    robot_dir: Path | None = None  # robots/<name>/, None for a profile without one
+    robot_dir: Path | None = None  # config/robots/<name>/, None for a profile without one
     max_acc: tuple[float, ...] | None = None  # rad/s^2 per joint of joint_order, the URDF has none
     torso: ArmSpec | None = None  # the torso joints shared by both arms, None on a fixed-base dual arm
 
@@ -65,7 +65,7 @@ def read_yaml(path: Path) -> dict:
 
 
 def load_profile(robot_dir: Path) -> RobotProfile:
-    """Profile of robots/<name>/robot.yaml, the paths in it relative to that folder."""
+    """Profile of config/robots/<name>/robot.yaml, the paths in it relative to that folder."""
     robot_dir = Path(robot_dir).resolve()
     cfg = read_yaml(robot_dir / "robot.yaml")
     groups = [g for g in ("torso", "left", "right") if cfg["joints"].get(g)]
@@ -93,6 +93,6 @@ def generic(n_left: int, n_right: int) -> RobotProfile:
     )
 
 
-# The robots of robots/*/robot.yaml by name.
+# The robots of config/robots/*/robot.yaml by name.
 PROFILES = {p.name: p for p in (load_profile(d.parent) for d in sorted(ROBOTS_DIR.glob("*/robot.yaml")))}
 MARVIN = PROFILES["marvin"]

@@ -57,7 +57,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("path", type=Path, help="solve session folder (holding run_*/) or one run folder")
     parser.add_argument("--run", type=int, default=1, help="run of the session to show")
-    parser.add_argument("--robot", type=Path, help="robot folder, by default robots/<robot of run_info.json>")
+    parser.add_argument("--robot", type=Path, help="robot folder, by default config/robots/<robot of run_info.json>")
     parser.add_argument("--fps", type=float, default=30.0, help="animation frame rate")
     parser.add_argument("--from-phase", default="S1", help="first phase shown (S0 is the hold at q_pd)")
     parser.add_argument("--no-wait", action="store_true", help="exit after loading (the viewer goes with it)")
@@ -74,7 +74,7 @@ def main() -> int:
         print(f"error: {run / 'solve.csv'} missing, run scripts/analyze_solve.py first", file=sys.stderr)
         return 1
     info = json.loads((run / "run_info.json").read_text())
-    robot_dir = (args.robot or REPO_ROOT / "robots" / info["robot"]).resolve()
+    robot_dir = (args.robot or REPO_ROOT / "config" / "robots" / info["robot"]).resolve()
     profile = load_profile(robot_dir)
 
     header, values, text = read_csv(run / "solve.csv")

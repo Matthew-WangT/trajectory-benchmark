@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Replay a case on the Marvin, evaluate it and print the results, in one terminal session; or solve a case on a
-robot of robots/ with the IK controller alone.
+robot of config/robots/ with the IK controller alone.
 
 Run it through ./benchmark.sh, which builds the image and the code and starts this script in the container.
 Options not given on the command line are picked with arrow-key menus: the mode (real robot / dry run / trajectory
 solve), the case under data/, then the config under config/ and what to run (the full case or one of the
-step-by-step bring-up stages), or for the solve the robot under robots/. Then, without further input:
+step-by-step bring-up stages), or for the solve the robot under config/robots/. Then, without further input:
   solve:
   1. build/bin/replay --solve runs the IK controller in real time against an ideal robot
   2. scripts/analyze_solve.py: solve error, joint limit margins, velocity / acceleration distributions, a table
@@ -120,7 +120,7 @@ def list_configs() -> list[Path]:
 
 
 def list_robots() -> list[Path]:
-    return sorted(p.parent for p in (REPO / "robots").glob("*/robot.yaml"))
+    return sorted(p.parent for p in (REPO / "config" / "robots").glob("*/robot.yaml"))
 
 
 # Exit code that asks ./benchmark.sh to run the same plan again in the s1 image.
@@ -192,7 +192,7 @@ def resolve(args: argparse.Namespace) -> Plan:
             if len(robots) > 1:
                 print()
         else:
-            robot = Path(args.robot) if (Path(args.robot) / "robot.yaml").is_file() else REPO / "robots" / args.robot
+            robot = Path(args.robot) if (Path(args.robot) / "robot.yaml").is_file() else REPO / "config" / "robots" / args.robot
             if not (robot / "robot.yaml").is_file():
                 sys.exit(f"unknown robot {args.robot}; known: {[r.name for r in robots]}")
         return Plan("solve", case, None, robot.resolve(), "full", args.runs or 1)
@@ -443,7 +443,7 @@ def main() -> int:
     parser.add_argument("--mode", choices=("real", "dry", "solve"))
     parser.add_argument("--case", help="case folder name under data/ (or a path)")
     parser.add_argument("--config", help="config file name under config/ (or a path)")
-    parser.add_argument("--robot", help="solve: robot folder name under robots/ (or a path)")
+    parser.add_argument("--robot", help="solve: robot folder name under config/robots/ (or a path)")
     parser.add_argument("--no-view", action="store_true", help="solve: skip the 3D playback in the browser")
     parser.add_argument("--stage", choices=tuple(STAGES), help="full, or stop after a bring-up stage")
     parser.add_argument("--runs", type=int, help="number of runs of the case")

@@ -1,17 +1,17 @@
 # Receding-horizon OCS2 IK controller of the S1, one MPC over the torso and both arms. The other values follow
-# robots/marvin/ocs2/controller.yaml. Relative paths are resolved against this folder.
+# config/robots/marvin/ocs2/controller.yaml. Relative paths are resolved against this folder.
 type: whole_body
 info: task_s1_whole_body.info
 
 # CppAD generated libraries, kept across runs since the first generation takes minutes. One folder per robot, the
 # libraries are named after the kinematics, not the model.
-tmp_working_dir: ../../../runs/.cppad_cache/s1
+tmp_working_dir: ../../../../runs/.cppad_cache/s1
 
-# Pulls toward the per-solve seed, for the one-shot solver only; see robots/marvin/ocs2/controller.yaml.
+# Pulls toward the per-solve seed, for the one-shot solver only; see config/robots/marvin/ocs2/controller.yaml.
 joint_reg_enable: false
 
 # Pulls toward the task .info initialState (q_pd). The torso is weighted up so that it serves as a redundancy and does
-# not drift; the arm values are those of robots/marvin.
+# not drift; the arm values are those of config/robots/marvin.
 default_q_reg_enable: true
 default_q_reg_weight: 0.005
 default_reg_q_weight_scale: [20.0, 20.0, 20.0, 20.0,

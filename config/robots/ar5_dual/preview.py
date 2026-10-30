@@ -1,4 +1,4 @@
-"""Render the actual URDF meshes: python robots/ar5_dual/preview.py [--zero]."""
+"""Render the actual URDF meshes: python config/robots/ar5_dual/preview.py [--zero]."""
 from pathlib import Path
 import json
 import sys

@@ -67,7 +67,7 @@ struct SolveConfig {
   int max_consecutive_holds = 50;
 };
 
-// The robot folder robots/<name>/robot.yaml: model, IK controller settings and start pose, shared by the solve and
+// The robot folder config/robots/<name>/robot.yaml: model, IK controller settings and start pose, shared by the solve and
 // the replay.
 struct RobotModelConfig {
   std::string name;
@@ -84,7 +84,7 @@ struct RobotModelConfig {
   std::string right_ee_frame;
   // The IK controller is evaluated every `evaluate_every_ticks` loop ticks of 1 ms.
   int evaluate_every_ticks = 2;
-  // The command is sent every `send_every_ticks` loop ticks of 1 ms, see robots/marvin/robot.yaml.
+  // The command is sent every `send_every_ticks` loop ticks of 1 ms, see config/robots/marvin/robot.yaml.
   int send_every_ticks = 2;
   ReferenceMode reference_mode = ReferenceMode::kLookahead;
   // kLookahead: length of the trajectory window given to the controller, 0 is the MPC horizon.
@@ -116,7 +116,7 @@ struct ReplayConfig {
   double dry_run_time_constant_s = 0.01;
 };
 
-// Loads robots/<name>/robot.yaml from the robot folder. Relative paths in it are resolved against the folder.
+// Loads config/robots/<name>/robot.yaml from the robot folder. Relative paths in it are resolved against the folder.
 RobotModelConfig LoadRobotModelConfig(const std::string& robot_dir);
 
 // Loads the replay yaml and the robot folder it names. Relative paths in it are resolved against the folder of the

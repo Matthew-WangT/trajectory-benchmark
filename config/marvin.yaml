@@ -1,7 +1,7 @@
 # Replay configuration of the Marvin dual arms. Joint values in rad, relative paths against this folder.
 # Defaults are the ones of the reference pipeline on marvin1 (infer-06). The robot model, the IK controller settings
 # and the start pose are in the robot folder.
-robot_dir: ../robots/marvin
+robot_dir: robots/marvin
 
 robot:
   ip: 192.168.1.190

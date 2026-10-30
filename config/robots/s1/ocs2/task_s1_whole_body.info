@@ -1,7 +1,7 @@
 ; Whole-body IK of the Astribot S1 (torso 4 + two arms 7, one MPC tracking both TCPs), adapted from the dual-arm task of
 ; the reference pipeline (mindon_robotics assets/config/s1/dual_arm_ocs2_kinematics/task_s1_dual_arm_left.info): the
 ; torso and the right arm stay in the model, both end effectors are tracked, the state vector is torso, left arm,
-; right arm. The torso velocity costs 10 times an arm joint, see robots/s1/README.md.
+; right arm. The torso velocity costs 10 times an arm joint, see config/robots/s1/README.md.
 ; robot model meta-information
 model_information {
   manipulatorModelType     0      // 0: Default-arm, 1: Wheel-based manipulator, 2: Floating-arm manipulator

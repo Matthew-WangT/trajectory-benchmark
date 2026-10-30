@@ -95,7 +95,7 @@ class SdkRobot:
 
 
 class FakeRobot:
-    """Kinematic stand-in of the S1 on the robots/s1 URDF: joint commands are followed exactly, a cartesian command
+    """Kinematic stand-in of the S1 on the config/robots/s1 URDF: joint commands are followed exactly, a cartesian command
     moves the joints by a few damped least squares steps toward the SDK end-effector targets (all 18 joints, the
     torso weighted down, a pull toward q_pd in the null space), like the WBC iterating once per period."""
 

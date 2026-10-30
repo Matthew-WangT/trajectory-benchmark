@@ -1,6 +1,6 @@
 # Astribot S1
 
-腰 4 个关节，两臂各 7 个关节，两臂各装一个 F90C 夹爪。轨迹求解用 OCS2 全身 IK；真机通过 SDK 的 WBC 跟踪 TCP，见 [docs/replay.md](../../docs/replay.md#astribot-s1)。
+腰 4 个关节，两臂各 7 个关节，两臂各装一个 F90C 夹爪。轨迹求解用 OCS2 全身 IK；真机通过 SDK 的 WBC 跟踪 TCP，见 [docs/replay.md](../../../docs/replay.md#astribot-s1)。
 
 ## 模型
 
