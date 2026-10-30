@@ -4,3 +4,7 @@ build/
 runs/
 # Written into the working directory by the Astribot SDK when a command of it fails.
 astribot_fatal_exec_error.txt
+# The Astribot SDK, obtained from Astribot, only for the S1 real robot; see docs/replay.md.
+third_party/astribot_sdk/
+# Image tarballs of docker/image.sh save.
+docker/images/

@@ -1,3 +1,0 @@
-[submodule "third_party/astribot_sdk"]
-	path = third_party/astribot_sdk
-	url = https://github.com/Astribot-Dev/astribot_sdk_ros2.git

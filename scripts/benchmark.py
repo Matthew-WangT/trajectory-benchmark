@@ -123,6 +123,10 @@ def list_robots() -> list[Path]:
     return sorted(p.parent for p in (REPO / "robots").glob("*/robot.yaml"))
 
 
+# Exit code that asks ./benchmark.sh to run the same plan again in the s1 image.
+S1_RERUN_EXIT = 75
+
+
 def is_s1(config: Path) -> bool:
     """An S1 replay config: the robot is driven by the SDK sidecar scripts/s1_bridge.py."""
     return "bridge" in read_yaml(config)
@@ -241,12 +245,12 @@ def start_fake_bridge(config: Path, log: Path) -> subprocess.Popen:
                             stdout=open(log, "w"), stderr=subprocess.STDOUT)
 
 
-def request_sdk_bridge(config: Path) -> None:
-    """Asks ./benchmark.sh on the host to start the SDK sidecar in its image (the container cannot run docker)."""
-    (REPO / "runs").mkdir(exist_ok=True)
-    (REPO / "runs/.s1_bridge_request").write_text(os.path.relpath(config, REPO))
-    info("S1 真机: 请宿主上的 ./benchmark.sh 启动 SDK sidecar（日志 runs/s1_bridge.log）；没有经 ./benchmark.sh 启动"
-         "时，在另一个终端运行 docker/s1_bridge/run.sh")
+def start_sdk_bridge(config: Path, log: Path) -> subprocess.Popen:
+    """The S1 sidecar on the real robot through the Astribot SDK, in this container (the s1 image)."""
+    log.parent.mkdir(parents=True, exist_ok=True)
+    info(f"S1 真机: 启动 SDK sidecar (scripts/s1_bridge.py)，日志 {os.path.relpath(log, REPO)}")
+    return subprocess.Popen(["docker/s1_sdk_env.sh", "python3", "scripts/s1_bridge.py", "--config", str(config)],
+                            cwd=REPO, stdout=open(log, "w"), stderr=subprocess.STDOUT)
 
 
 def solve_session(case: Path, robot: Path) -> Path:
@@ -477,6 +481,17 @@ def main() -> int:
     print(f"    输出                 {os.path.relpath(session, REPO)}")
 
     solve_result = None
+    if plan.mode == "real" and is_s1(plan.config):
+        if not Path("/opt/ros/humble").is_dir():
+            # The base image: ./benchmark.sh runs the same plan again in the s1 image.
+            rerun = ["--mode", "real", "--case", str(plan.case), "--config", str(plan.config), "--stage", plan.stage,
+                     "--runs", str(plan.runs)] + (["-y"] if args.yes else [])
+            (REPO / "runs/.s1_rerun").write_text("\n".join(rerun) + "\n")
+            info("S1 真机要在 s1 镜像里运行（ROS 2 与 SDK 依赖），./benchmark.sh 会切换过去")
+            return S1_RERUN_EXIT
+        if not Path("/opt/astribot_sdk/astribot_sdk").is_dir():
+            warn("容器里没有挂载 Astribot SDK（/opt/astribot_sdk），见 docs/replay.md")
+            return 1
     if plan.mode == "real":
         if plan.stage == "full":
             solve_result = find_solve(plan.case, plan.robot)
@@ -505,10 +520,8 @@ def main() -> int:
 
     bridge = None
     if is_s1(plan.config):
-        if plan.dry:
-            bridge = start_fake_bridge(plan.config, session / "s1_bridge.log")
-        else:
-            request_sdk_bridge(plan.config)
+        start = start_fake_bridge if plan.dry else start_sdk_bridge
+        bridge = start(plan.config, session / "s1_bridge.log")
     try:
         code = run_replay(replay_command(plan, session, solve_result), log)
     finally:

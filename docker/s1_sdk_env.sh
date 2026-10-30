@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
-# Environment of the Astribot SDK in third_party/astribot_sdk (its env.sh, without writing into the submodule), then
-# runs the command. SDK_ROOT can point elsewhere.
+# Runs a command in the environment of the Astribot SDK (its env.sh, without writing into the SDK), inside the s1
+# image: docker/run.sh mounts the SDK at /opt/astribot_sdk, python3 is the one of the SDK venv. Only this process
+# and its children see the SDK libraries, the replay keeps its own.
+#   docker/s1_sdk_env.sh python3 scripts/s1_bridge.py --config config/s1.yaml
 set -eo pipefail
 
-SDK_ROOT=${SDK_ROOT:-/workspace/third_party/astribot_sdk}
+SDK_ROOT=${SDK_ROOT:-/opt/astribot_sdk}
+if [[ ! -d /opt/ros/humble ]]; then
+  echo "[s1_sdk_env] not the s1 image: run the benchmark with TARGET=s1, see docs/replay.md" >&2
+  exit 1
+fi
 if [[ ! -d "$SDK_ROOT/astribot_sdk" ]]; then
-  echo "[s1_bridge] $SDK_ROOT is empty, run: git submodule update --init third_party/astribot_sdk" >&2
+  echo "[s1_sdk_env] no Astribot SDK at $SDK_ROOT: put it at third_party/astribot_sdk or set ASTRIBOT_SDK_DIR," \
+       "see docs/replay.md" >&2
   exit 1
 fi
 
@@ -20,12 +27,13 @@ done
 set -e
 
 # The compiled whole-body control imports meta.whole_body_control... by the vendor source tree name: a package "meta"
-# for astribot_sdk/core/common, outside the submodule.
+# for astribot_sdk/core/common, outside the SDK.
 META_DIR=/tmp/s1_bridge_pkgs
 mkdir -p "$META_DIR"
 ln -sfn "$SDK_ROOT/astribot_sdk/core/common" "$META_DIR/meta"
 
 COMMON="$SDK_ROOT/astribot_sdk/core/common"
+export PATH="/opt/astribot_venv/bin:$PATH"
 export PYTHONPATH="$COMMON:$SDK_ROOT:$SDK_ROOT/third_party/astribot_ros_middleware_py:$META_DIR:${PYTHONPATH:-}"
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:$COMMON/robotics_library_py:$COMMON/whole_body_control/third_party:$SDK_ROOT/third_party/drake/lib"
 export ROBOT_TYPE=S1

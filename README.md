@@ -23,8 +23,8 @@ src/          replay 程序：mpc/（移植的 IK controller）、arm/（Marvin 
 src/s1/       Astribot S1 真机：与 SDK sidecar 的 UDP 协议、运行循环、安全检查
 robots/       每台机器人一个目录：robot.yaml（关节、TCP、加速度限值、IK 与起始参数）、urdf/、meshes/、ocs2/（IK controller 与 task .info）
 config/       marvin.yaml（真机：IP、增益、工具、安全参数，引用 robots/marvin）、s1.yaml（S1 真机：sidecar、坐标、安全开关）
-third_party/  Marvin 控制 SDK（Apache-2.0）、OCS2 子集（BSD-3，加了多末端）、astribot_sdk（submodule，BSD-3，只有 S1 真机需要）
-docker/       主镜像；s1_bridge/ 是 S1 SDK sidecar 的镜像（ROS 2 Humble）
+third_party/  Marvin 控制 SDK（Apache-2.0）、OCS2 子集（BSD-3，加了多末端）、S1 真机要的 astribot_sdk 不随仓库提供，见 docs/replay.md
+docker/       Dockerfile（base 与 s1 两个镜像，s1 只给 S1 真机用）、image.env / image.sh（镜像名与版本、构建与发布）、run.sh、s1_sdk_env.sh
 python/       trackeval 评价包
 benchmark.sh  唯一入口：构建 + 菜单 + replay + 评价 + 打印
 scripts/      benchmark.py（菜单与流程）、analyze_solve.py、view_solve.py（3D 回放）、make_delivery_csv.py、evaluate.py、summarize.py、s1_bridge.py（S1 SDK sidecar）

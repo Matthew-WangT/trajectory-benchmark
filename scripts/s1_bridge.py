@@ -2,8 +2,8 @@
 """Sidecar of the S1 replay: drives the Astribot S1 through its SDK, one command per SDK period, for the replay
 (build/bin/replay --config config/s1.yaml) that answers each feedback frame over UDP. See src/s1/bridge_protocol.h.
 
-    # In the docker/s1_bridge image, next to the robot (./benchmark.sh starts it):
-    python3 scripts/s1_bridge.py --config config/s1.yaml
+    # In the s1 image, next to the robot (scripts/benchmark.py starts it):
+    docker/s1_sdk_env.sh python3 scripts/s1_bridge.py --config config/s1.yaml
     # Without the robot and the SDK, in the benchmark image: a kinematic stand-in of the S1 (ideal joints, one
     # damped least squares step toward the cartesian targets per period, like one WBC iteration):
     python3 scripts/s1_bridge.py --config config/s1.yaml --fake

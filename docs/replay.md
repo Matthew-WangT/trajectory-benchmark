@@ -43,11 +43,13 @@ eef_command.csv ──> OCS2 滚动时域 IK ──q_cmd──> 关节阻抗 (SD
 
 ## 步骤
 
-只需要一条命令，在宿主机上执行（需要 docker；第一次运行会构建镜像：pinocchio 3.7.0 + hpp-fcl 2.4.5 源码编译）：
+只需要一条命令，在宿主机上执行（需要 docker）：
 
 ```bash
 ./benchmark.sh
 ```
+
+第一次运行会从阿里云镜像仓库拉取基础镜像，地址和版本写在 `docker/image.env`，仓库是公开的，不用登录。拉不到时依次尝试：从 `docker/images/` 下的 tar 包加载（离线机器用 `docker/image.sh save` 导出），最后才在本地构建（pinocchio 3.7.0 + hpp-fcl 2.4.5 源码编译，较慢）。s1 镜像只在跑 S1 真机时才拉。改了 `docker/Dockerfile` 后，要把 `VERSION` 加一，再执行 `docker/image.sh build && docker/image.sh push`；本地镜像和 Dockerfile 对不上时，`docker/run.sh` 会提示。
 
 它会自动增量编译（日志在 `build/build.log`），然后用方向键菜单依次选择（↑/↓ 或 j/k，Enter 确认，q 退出）：
 
@@ -124,7 +126,11 @@ S1 有 4 个腰关节，两臂各 7 个关节，装 F90C 夹爪。模型、限�
 
 - **轨迹求解**：`./benchmark.sh --mode solve --robot s1`。用 OCS2 全身 IK 解 18 个关节，流程和指标同上一节，表里多出一列"腰"。
 - **真机**：`./benchmark.sh --mode real --config s1.yaml`。S1 只能通过它的 Python SDK 控制（ROS 2 Humble），所以链路分成两个进程：
-  - sidecar `scripts/s1_bridge.py`：跑在 `docker/s1_bridge` 镜像里，SDK 是 submodule `third_party/astribot_sdk`（公开仓库，先执行 `git submodule update --init third_party/astribot_sdk`）。`benchmark.sh` 看到 S1 配置加真机模式时，会在宿主机上自动启动它，日志在 `runs/s1_bridge.log`。用交互菜单时，要另开一个终端运行 `docker/s1_bridge/run.sh`。
+  - sidecar `scripts/s1_bridge.py`：调用 SDK，由 `scripts/benchmark.py` 在同一个容器里作为子进程启动，日志在本次 session 目录的 `s1_bridge.log`。
+    - **SDK 要单独获取。** 它不在本仓库里，需要向 Astribot 索取；已验证的版本是 `astribot_sdk_ros2` 的 `27e0c04`。把它放到 `third_party/astribot_sdk`（已被 `.gitignore` 忽略），或者用 `ASTRIBOT_SDK_DIR=<路径>` 指向别处。
+    - **镜像按需切换。** 平时只用基础镜像，S1 的求解和 dry-run 也在基础镜像里跑。在菜单里选了 S1 真机后，`benchmark.py` 会带着选好的选项退出，`benchmark.sh` 接着拉取 s1 镜像（基础镜像加 ROS 2 Humble 和 SDK 依赖），把 SDK 挂到 `/opt/astribot_sdk`，再在 s1 镜像里按同样的选项重新执行一遍。
+    - **只在 sidecar 里生效的环境。** `docker/s1_sdk_env.sh` 设置 SDK 的环境，只作用于 sidecar 进程：用独立 venv 里的 numpy 1.22，加载 SDK 自带的动态库。replay 和评价脚本不受影响。
+    - **单独检查 SDK：** `TARGET=s1 docker/run.sh docker/s1_sdk_env.sh python3 -c "import astribot_sdk"`。
   - replay：`build/bin/replay --config config/s1.yaml`，在 127.0.0.1 的 UDP 端口 `bridge.port` 上等 sidecar。
   - **时钟在 sidecar 一侧**：sidecar 以 `Astribot(freq=250)` 的周期循环，每个周期读一次机器人（18 关节的 q、dq、τ，SDK desired 关节，两臂 SDK 末端位姿），把反馈发给 replay，在 `bridge.reply_timeout_s` 内等对应 `seq` 的命令再下发。超时就重发上一帧并记一次 miss，连续 miss 超过 `bridge.max_consecutive_miss` 就停发。第 k 个周期的命令取 run 时钟上 k / freq 处的值，相邻两帧正好相隔一个 SDK 周期；SDK 正是按这个周期把位置差分成速度前馈的。帧格式见 `src/s1/bridge_protocol.h`。
   - **命令**：S0 用 `set_joints_position(腰, 左, 右; direct)` 下发 18 维最小加加速度插值。从 S1 起改用 `set_cartesian_pose(左, 右; direct, use_wbc=True, add_default_torso=False)`，腰交给 SDK 的 WBC，作为冗余自由度；设 `torso_command: hold` 时，S1 开始时的腰位姿也每帧一起发下去。S1 的起点取 S0 结束时实测的 TCP，避免切换模式时跳变。
